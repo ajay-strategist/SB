@@ -658,7 +658,8 @@ const DB = (() => {
 
   // ── Seed Data ────────────────────────────────────────────────
   async function seed() {
-    if (get('sb_seeded')) return;
+    // Skip only if flagged AND users actually exist in storage
+    if (get('sb_seeded') && getArr(KEYS.users).length > 0) return;
 
     // Settings
     Settings.set({
@@ -947,7 +948,8 @@ const DB = (() => {
   async function init() {
     try {
       const remoteHasData = await SB.hydrate();      // no-op unless Supabase is configured
-      if (remoteHasData) set('sb_seeded', true);     // don't seed over existing remote data
+      // Only skip seeding if Supabase actually returned users
+      if (remoteHasData && getArr(KEYS.users).length > 0) set('sb_seeded', true);
     } catch (e) { console.warn('[SB] init hydrate failed', e); }
     await seed();
     try { Classes.promoteIfDue('system'); } catch (e) { /* no-op */ }
