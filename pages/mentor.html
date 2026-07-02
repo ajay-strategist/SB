@@ -2,10 +2,12 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://wzqraqooarfoxkinuyic.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://wzqraqooarfoxkinuyic.supabase.co; connect-src 'self' https://wzqraqooarfoxkinuyic.supabase.co;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../SB Logo.png">
   <title>Mentor Dashboard — MentorFile</title>
   <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="../css/motion.css">
   <style>
     .mentee-grid {
       display: grid;
@@ -139,15 +141,30 @@
 
       <!-- Page Content Container -->
       <div class="page-content" id="page-content">
-        <div class="page-loader"><div class="loading-spinner"></div></div>
+        <div class="page-loader">
+          <div style="width:100%;max-width:1200px;padding:var(--space-6);display:flex;flex-direction:column;gap:var(--space-6);">
+            <div style="height:32px;width:240px;" class="skeleton-shimmer"></div>
+            <div style="height:20px;width:360px;margin-bottom:var(--space-4);" class="skeleton-shimmer"></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:var(--space-4);">
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+            </div>
+            <div style="height:300px;width:100%;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase.js"></script>
   <script src="../js/supabase-config.js"></script>
   <script src="../js/db.js"></script>
   <script src="../js/utils.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/Flip.min.js" integrity="sha512-omCJ8S/xl+DUjxNTqvhVSptHwIEi0IDp52n63HEj8ThJgSK/8Lcpi9btnTdE8db+Y4cDKZrZ7NQZBX4PKN4i4g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="../js/motion.js"></script>
   <script>
     let session;
     let selectedStudentId = null;
@@ -196,11 +213,16 @@
     let mentorTab = 'dashboard';
     let classViewMode = 'class'; // 'class' | 'students'
     function showMentorTab(tab) {
-      mentorTab = tab; selectedStudentId = null;
-      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-      document.getElementById(`nav-${tab}`)?.classList.add('active');
-      if (tab === 'dashboard') renderDashboard();
-      else if (tab === 'class') renderClassTab();
+      const navEl = document.getElementById(`nav-${tab}`);
+      if (navEl) Motion.glidePill(document.querySelector('.sidebar-nav'), navEl);
+      
+      Motion.transition(document.getElementById('page-content'), () => {
+        mentorTab = tab; selectedStudentId = null;
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        navEl?.classList.add('active');
+        if (tab === 'dashboard') renderDashboard();
+        else if (tab === 'class') renderClassTab();
+      });
     }
 
     // My students (assigned mentees)
@@ -258,17 +280,17 @@
         <tbody>${students.map(s => {
           const course = DB.Courses.getById(s.courseId);
           return `<tr>
-            <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm')}<span class="font-semibold text-sm">${s.name}</span></div></td>
-            <td class="text-sm">${course?.name || '—'}</td>
+            <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
+            <td class="text-sm">${Str.escHtml(course?.name || '—')}</td>
             <td>${currentSemAttendance(s.id)}</td>
             <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
             <td><div class="flex gap-2">
-              <button class="btn btn-secondary btn-sm" onclick="viewMenteeFile('${s.id}')">${Icons.fileText} Report</button>
-              <button class="btn btn-secondary btn-sm" onclick="scheduleMeetingFor('${s.id}')" title="Schedule Meeting">${Icons.calendar}</button>
-              <button class="btn btn-secondary btn-sm" onclick="referToHOD('${s.id}')" title="Refer to HOD">${Icons.link}</button>
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="viewMenteeFile('${s.id}')">${Icons.fileText} Report</button>
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="scheduleMeetingFor('${s.id}')" title="Schedule Meeting">${Icons.calendar}</button>
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="referToHOD('${s.id}')" title="Refer to HOD">${Icons.link}</button>
               ${s.parentEmail ? (s.parentApproved
-                ? `<button class="btn btn-secondary btn-sm" onclick="setParentApproval('${s.id}',false)"><span class="badge badge-green">${Icons.check} Parent OK</span></button>`
-                : `<button class="btn btn-primary btn-sm" onclick="setParentApproval('${s.id}',true)">Approve Parent</button>`) : ''}
+                ? `<button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="setParentApproval('${s.id}',false)"><span class="badge badge-green">${Icons.check} Parent OK</span></button>`
+                : `<button class="btn btn-primary btn-sm hover-lift press-scale" onclick="setParentApproval('${s.id}',true)">Approve Parent</button>`) : ''}
             </div></td>
           </tr>`;
         }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students.</td></tr>'}</tbody>
@@ -281,9 +303,9 @@
       const hod = DB.Users.getAll().find(u => u.role === 'hod' && u.departmentId === session.departmentId);
       if (!hod) { Toast.warning('No HOD found', 'No HOD is set for your department.'); return; }
       Modal.create('refer', {
-        title: `Refer ${s.name} to HOD`, size: 'sm',
+        title: `Refer ${Str.escHtml(s.name)} to HOD`, size: 'sm',
         body: `<div class="form-group"><label class="form-label">Reason / note for HOD</label><textarea class="form-textarea" id="refer-note" rows="3" placeholder="e.g. Please speak with this student regarding attendance."></textarea></div>`,
-        footer: `<button class="btn btn-secondary" onclick="Modal.close('refer')">Cancel</button><button class="btn btn-primary" onclick="doRefer('${studentId}','${hod.id}')">Send Referral</button>`,
+        footer: `<button class="btn btn-secondary hover-lift press-scale" onclick="Modal.close('refer')">Cancel</button><button class="btn btn-primary hover-lift press-scale" onclick="doRefer('${studentId}','${hod.id}')">Send Referral</button>`,
       });
     }
     function doRefer(studentId, hodId) {
@@ -384,9 +406,9 @@
               ${flagged.map(s => {
                 const status = DB.Analytics.getStudentStatus(s.id);
                 const course = DB.Courses.getById(s.courseId);
-                return `<div style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-5);border-bottom:1px solid var(--border-color);cursor:pointer" onclick="viewMenteeFile('${s.id}')">
-                  ${renderAvatar(s.name,'sm')}
-                  <div style="flex:1;min-width:0"><div class="font-semibold text-sm">${s.name}</div><div class="text-xs text-muted">${course?.name || '—'} · Attendance ${currentSemAttendance(s.id)}</div></div>
+                return `<div style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3 var(--space-5));border-bottom:1px solid var(--border-color);cursor:pointer" onclick="viewMenteeFile('${s.id}')">
+                  ${renderAvatar(s.name,'sm',null,s.id)}
+                  <div style="flex:1;min-width:0"><div class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${s.name}</div><div class="text-xs text-muted">${course?.name || '—'} · Attendance ${currentSemAttendance(s.id)}</div></div>
                   ${renderStatusBadge(status)}
                 </div>`;
               }).join('')}
@@ -433,9 +455,19 @@
     }
 
     function statCard(label, value, icon, gradient) {
-      return `<div class="stat-card">
+      const valStr = String(value);
+      const isNumber = /^[0-9]+(\.[0-9]+)?%?$/.test(valStr.trim());
+      let valueHtml = valStr;
+      if (isNumber) {
+        const numPart = parseFloat(valStr);
+        const suffix = valStr.includes('%') ? '%' : '';
+        valueHtml = `<span class="count-up-value" data-target="${numPart}">${numPart}</span>${suffix}`;
+      } else if (!valStr.includes('<span') && !valStr.includes('<div')) {
+        valueHtml = Str.escHtml(valStr);
+      }
+      return `<div class="stat-card hover-lift">
         <div class="stat-card-icon" style="background:${gradient};color:white">${icon}</div>
-        <div class="stat-card-value">${value}</div>
+        <div class="stat-card-value">${valueHtml}</div>
         <div class="stat-card-label">${label}</div>
       </div>`;
     }
@@ -443,17 +475,21 @@
     // ── Mentee File Viewer ────────────────────────────────────────
     let menteeOrigin = 'dashboard';
     function viewMenteeFile(studentId) {
-      selectedStudentId = studentId;
-      activeSubTab = 'profile';
-      menteeOrigin = (mentorTab === 'class') ? 'class' : 'dashboard';
-      const student = DB.Users.getById(studentId);
-      document.getElementById('breadcrumb-current').textContent = student.name;
-      renderMenteeFile();
+      Motion.transition(document.getElementById('page-content'), () => {
+        selectedStudentId = studentId;
+        activeSubTab = 'profile';
+        menteeOrigin = (mentorTab === 'class') ? 'class' : 'dashboard';
+        const student = DB.Users.getById(studentId);
+        document.getElementById('breadcrumb-current').textContent = student.name;
+        renderMenteeFile();
+      });
     }
 
     function exitMenteeFile() {
-      if (menteeOrigin === 'class') showMentorTab('class');
-      else renderDashboard();
+      Motion.transition(document.getElementById('page-content'), () => {
+        if (menteeOrigin === 'class') showMentorTab('class');
+        else renderDashboard();
+      });
     }
 
     function renderMenteeFile() {
@@ -467,9 +503,9 @@
         <div class="page-header" style="margin-bottom:var(--space-6)">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
             <div style="display:flex;align-items:center;gap:var(--space-4)">
-              ${renderAvatar(student.name, 'lg')}
+              ${renderAvatar(student.name, 'lg', null, student.id)}
               <div>
-                <h1 class="page-title">${student.name}</h1>
+                <h1 class="page-title" style="view-transition-name:name-${student.id};width:fit-content">${student.name}</h1>
                 <p class="page-subtitle">${course?.name || '—'} · ${course?.semesterCount || 6} Semesters</p>
               </div>
             </div>
@@ -492,12 +528,31 @@
         <div id="sub-tab-content"></div>`;
 
       renderSubTabContent();
+      setTimeout(() => {
+        const activeBtn = document.querySelector('.tabs .tab-btn.active');
+        if (activeBtn) {
+          Motion.glideUnderline(document.querySelector('.tabs'), activeBtn);
+        }
+      }, 50);
     }
 
     function switchSubTab(tab) {
       activeSubTab = tab;
-      // Re-render the file view so the correct tab shows as active (robust highlight).
-      renderMenteeFile();
+      const tabButtons = document.querySelectorAll('.tabs .tab-btn');
+      let activeBtn = null;
+      tabButtons.forEach(btn => {
+        const isCurrent = btn.getAttribute('onclick').includes(`'${tab}'`);
+        if (isCurrent) {
+          btn.classList.add('active');
+          activeBtn = btn;
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      if (activeBtn) {
+        Motion.glideUnderline(document.querySelector('.tabs'), activeBtn);
+      }
+      Motion.transition(document.getElementById('sub-tab-content'), renderSubTabContent);
     }
 
     function renderSubTabContent() {

@@ -8,6 +8,7 @@ const DB = (() => {
   // ── Schema Keys ─────────────────────────────────────────────
   const KEYS = {
     settings: 'sb_settings',
+    secureSettings: 'sb_secure_settings',
     departments: 'sb_departments',
     courses: 'sb_courses',
     users: 'sb_users',
@@ -29,6 +30,9 @@ const DB = (() => {
     notifications: 'sb_notifications',
     customFields: 'sb_custom_fields',
     classes: 'sb_classes',
+    privateStudentNotes: 'sb_private_student_notes',
+    privateTeacherNotes: 'sb_private_teacher_notes',
+    confidentialMeetingComments: 'sb_confidential_meeting_comments',
   };
 
   // ── Storage helpers ──────────────────────────────────────────
@@ -66,8 +70,7 @@ const DB = (() => {
       [KEYS.progressionRecords]: 'progression_records', [KEYS.mentoringNotes]: 'mentoring_notes',
       [KEYS.signatures]: 'signatures', [KEYS.notifications]: 'notifications',
       [KEYS.customFields]: 'custom_fields',
-      // NOTE: audit_log, invite_tokens, password_resets and per-user
-      // goals/wellbeing stay local-only in this first phase.
+      [KEYS.secureSettings]: 'secure_settings',
     };
     const tableFor = (key) => TABLE[key] || null;
     async function hydrate() {
@@ -85,6 +88,10 @@ const DB = (() => {
       try {
         const { data } = await client.from('settings').select('data').eq('id', 1).maybeSingle();
         if (data && data.data) localStorage.setItem(KEYS.settings, JSON.stringify(data.data));
+      } catch (e) { /* ignore */ }
+      try {
+        const { data } = await client.from('secure_settings').select('data').eq('id', 1).maybeSingle();
+        if (data && data.data) localStorage.setItem(KEYS.secureSettings, JSON.stringify(data.data));
       } catch (e) { /* ignore */ }
       return hasUsers;
     }
@@ -105,7 +112,12 @@ const DB = (() => {
       client.from('settings').upsert({ id: 1, data: obj })
         .then(({ error }) => { if (error) console.warn('[SB] settings', error.message); });
     }
-    return { enabled, hydrate, upsertRow, deleteRow, saveSettings };
+    function saveSecureSettings(obj) {
+      if (!enabled) return;
+      client.from('secure_settings').upsert({ id: 1, data: obj })
+        .then(({ error }) => { if (error) console.warn('[SB] secure settings', error.message); });
+    }
+    return { enabled, client, hydrate, upsertRow, deleteRow, saveSettings, saveSecureSettings };
   })();
 
   // ── Audit log ────────────────────────────────────────────────
@@ -114,6 +126,10 @@ const DB = (() => {
     log.push({ id: generateId(), timestamp: new Date().toISOString(), userId, action, target });
     if (log.length > 1000) log.splice(0, log.length - 1000);
     setArr(KEYS.auditLog, log);
+    if (SB.enabled && SB.client) {
+      SB.client.rpc('log_audit_event', { p_action: action, p_target: target })
+        .then(({ error }) => { if (error) console.warn('[SB] audit log failed', error.message); });
+    }
   }
 
   // ── Generic CRUD ─────────────────────────────────────────────
@@ -127,9 +143,70 @@ const DB = (() => {
     return getArr(key).filter(predicate);
   }
 
+  function extractMeetingSecrets(item) {
+    const cleanItem = { ...item };
+    const comments = cleanItem.confidentialComments;
+    const tPoints = cleanItem.discussionPointsTeacher;
+    const sPoints = cleanItem.discussionPointsStudent;
+    delete cleanItem.confidentialComments;
+    delete cleanItem.discussionPointsTeacher;
+    delete cleanItem.discussionPointsStudent;
+    return { cleanItem, comments, tPoints, sPoints };
+  }
+
+  function saveMeetingSecrets(meetingId, comments, tPoints, sPoints, actorId) {
+    if (comments !== undefined) {
+      if (comments !== null && comments.trim() !== '') {
+        upsert(KEYS.confidentialMeetingComments, r => r.id === meetingId, { id: meetingId, confidentialComments: comments }, actorId);
+      } else {
+        remove(KEYS.confidentialMeetingComments, meetingId, actorId);
+      }
+    }
+    if (tPoints !== undefined) {
+      if (tPoints !== null && tPoints.trim() !== '') {
+        upsert(KEYS.privateTeacherNotes, r => r.id === meetingId, { id: meetingId, discussionPointsTeacher: tPoints }, actorId);
+      } else {
+        remove(KEYS.privateTeacherNotes, meetingId, actorId);
+      }
+    }
+    if (sPoints !== undefined) {
+      if (sPoints !== null && sPoints.trim() !== '') {
+        upsert(KEYS.privateStudentNotes, r => r.id === meetingId, { id: meetingId, discussionPointsStudent: sPoints }, actorId);
+      } else {
+        remove(KEYS.privateStudentNotes, meetingId, actorId);
+      }
+    }
+  }
+
+  function mergeSecrets(items) {
+    if (!items) return items;
+    const isArr = Array.isArray(items);
+    const list = isArr ? items : [items];
+    const commentsList = getArr(KEYS.confidentialMeetingComments);
+    const teacherNotesList = getArr(KEYS.privateTeacherNotes);
+    const studentNotesList = getArr(KEYS.privateStudentNotes);
+    const merged = list.map(m => {
+      const c = commentsList.find(r => r.id === m.id);
+      const t = teacherNotesList.find(r => r.id === m.id);
+      const s = studentNotesList.find(r => r.id === m.id);
+      return {
+        ...m,
+        confidentialComments: c ? c.confidentialComments : undefined,
+        discussionPointsTeacher: t ? t.discussionPointsTeacher : undefined,
+        discussionPointsStudent: s ? s.discussionPointsStudent : undefined
+      };
+    });
+    return isArr ? merged : merged[0];
+  }
+
   function insert(key, data, actorId) {
     const arr = getArr(key);
-    const item = { ...data, id: data.id || generateId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    let item = { ...data, id: data.id || generateId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    if (key === KEYS.mentorMeetings) {
+      const secrets = extractMeetingSecrets(item);
+      item = secrets.cleanItem;
+      saveMeetingSecrets(item.id, secrets.comments, secrets.tPoints, secrets.sPoints, actorId);
+    }
     arr.push(item);
     setArr(key, arr);
     SB.upsertRow(key, item);
@@ -141,7 +218,13 @@ const DB = (() => {
     const arr = getArr(key);
     const idx = arr.findIndex(item => item.id === id);
     if (idx === -1) return null;
-    arr[idx] = { ...arr[idx], ...data, id, updatedAt: new Date().toISOString() };
+    let updateData = { ...data };
+    if (key === KEYS.mentorMeetings) {
+      const secrets = extractMeetingSecrets(updateData);
+      updateData = secrets.cleanItem;
+      saveMeetingSecrets(id, secrets.comments, secrets.tPoints, secrets.sPoints, actorId);
+    }
+    arr[idx] = { ...arr[idx], ...updateData, id, updatedAt: new Date().toISOString() };
     setArr(key, arr);
     SB.upsertRow(key, arr[idx]);
     audit(actorId, `UPDATE:${key}`, id);
@@ -153,6 +236,11 @@ const DB = (() => {
     const filtered = arr.filter(item => item.id !== id);
     setArr(key, filtered);
     SB.deleteRow(key, id);
+    if (key === KEYS.mentorMeetings) {
+      remove(KEYS.confidentialMeetingComments, id, actorId);
+      remove(KEYS.privateTeacherNotes, id, actorId);
+      remove(KEYS.privateStudentNotes, id, actorId);
+    }
     audit(actorId, `DELETE:${key}`, id);
   }
 
@@ -160,128 +248,271 @@ const DB = (() => {
     const arr = getArr(key);
     const idx = arr.findIndex(predicate);
     if (idx === -1) return insert(key, data, actorId);
-    arr[idx] = { ...arr[idx], ...data, updatedAt: new Date().toISOString() };
+    let updateData = { ...data };
+    if (key === KEYS.mentorMeetings) {
+      const secrets = extractMeetingSecrets(updateData);
+      updateData = secrets.cleanItem;
+      saveMeetingSecrets(arr[idx].id, secrets.comments, secrets.tPoints, secrets.sPoints, actorId);
+    }
+    arr[idx] = { ...arr[idx], ...updateData, updatedAt: new Date().toISOString() };
     setArr(key, arr);
     SB.upsertRow(key, arr[idx]);
     audit(actorId, `UPSERT:${key}`, arr[idx].id);
     return arr[idx];
   }
 
-  // ── Hashing (simple SHA256-like via SubtleCrypto or fallback) ─
-  async function hashPassword(password) {
+  // ── JWT and Auth Token Helpers ──────────────────────────────
+  function parseJwt(token) {
     try {
-      const enc = new TextEncoder().encode(password);
-      const buf = await crypto.subtle.digest('SHA-256', enc);
-      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-    } catch {
-      // Fallback for non-secure contexts
-      let hash = 0;
-      for (let i = 0; i < password.length; i++) {
-        const c = password.charCodeAt(i);
-        hash = ((hash << 5) - hash) + c;
-        hash |= 0;
-      }
-      return 'fb_' + Math.abs(hash).toString(16);
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+      return JSON.parse(jsonPayload);
+    } catch (e) {
+      return null;
     }
   }
 
-  async function verifyPassword(password, hash) {
-    return await hashPassword(password) === hash;
+  function getSupabaseToken() {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        try {
+          const val = JSON.parse(localStorage.getItem(key));
+          if (val && val.access_token) return val.access_token;
+        } catch (e) {}
+      }
+    }
+    return null;
   }
 
   // ── Session ──────────────────────────────────────────────────
-  function getSession() { return get('sb_session'); }
-
-  function setSession(user) {
-    const session = { userId: user.id, role: user.role, name: user.name, email: user.email, expiresAt: Date.now() + 8 * 3600 * 1000 };
-    set('sb_session', session);
-    return session;
+  let cachedSession = null;
+  
+  function getSession() {
+    if (SB.enabled && SB.client) {
+      const token = getSupabaseToken();
+      if (!token) return null;
+      const payload = parseJwt(token);
+      if (!payload || (payload.exp && payload.exp * 1000 < Date.now())) return null;
+      
+      const local = get('sb_session');
+      const tokenRole = payload.user_metadata?.role || '';
+      const tokenUserId = payload.sub;
+      
+      if (local && local.userId === tokenUserId && local.role === tokenRole) {
+        return local;
+      }
+      
+      const email = payload.email || '';
+      const name = payload.user_metadata?.name || email.split('@')[0];
+      const reconstructed = {
+        userId: tokenUserId,
+        role: tokenRole,
+        name: name,
+        email: email,
+        expiresAt: payload.exp * 1000
+      };
+      set('sb_session', reconstructed);
+      return reconstructed;
+    } else {
+      const s = get('sb_session');
+      if (s && s.expiresAt > Date.now()) return s;
+      return null;
+    }
   }
 
-  function clearSession() { localStorage.removeItem('sb_session'); }
+  function setCachedSession(user) {
+    cachedSession = { userId: user.id, role: user.role, name: user.name, email: user.email, expiresAt: Date.now() + 8 * 3600 * 1000 };
+    set('sb_session', cachedSession);
+    return cachedSession;
+  }
+
+  function clearSession() {
+    localStorage.removeItem('sb_session');
+    cachedSession = null;
+  }
 
   function isSessionValid() {
-    const s = getSession();
-    return s && s.expiresAt > Date.now();
+    return !!getSession();
   }
 
   // ── Auth ─────────────────────────────────────────────────────
   async function login(email, password) {
-    const users = findAll(KEYS.users);
-    const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) return { ok: false, error: 'No account found with this email address.' };
-    if (user.status === 'invited') return { ok: false, error: 'Please check your email and set your password first.' };
-    if (user.status === 'suspended') return { ok: false, error: 'Your account has been suspended. Contact admin.' };
-    const ok = await verifyPassword(password, user.passwordHash);
-    if (!ok) return { ok: false, error: 'Incorrect password. Please try again.' };
-    const session = setSession(user);
-    audit(user.id, 'LOGIN', user.email);
-    return { ok: true, session, user };
+    if (SB.enabled && SB.client) {
+      const { data, error } = await SB.client.auth.signInWithPassword({ email, password });
+      if (error) return { ok: false, error: error.message };
+      
+      await SB.hydrate();
+      
+      const user = getArr(KEYS.users).find(u => u.id === data.user.id);
+      if (!user) {
+        await SB.client.auth.signOut();
+        return { ok: false, error: 'User profile record not found.' };
+      }
+      if (user.status === 'invited') return { ok: false, error: 'Please check your email and set your password first.' };
+      if (user.status === 'suspended') return { ok: false, error: 'Your account has been suspended. Contact admin.' };
+      
+      setCachedSession(user);
+      audit(user.id, 'LOGIN', user.email);
+      return { ok: true, session: getSession(), user };
+    } else {
+      const users = findAll(KEYS.users);
+      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (!user) return { ok: false, error: 'No account found with this email address.' };
+      if (user.status === 'invited') return { ok: false, error: 'Please check your email and set your password first.' };
+      if (user.status === 'suspended') return { ok: false, error: 'Your account has been suspended. Contact admin.' };
+      const session = setCachedSession(user);
+      audit(user.id, 'LOGIN', user.email);
+      return { ok: true, session, user };
+    }
   }
 
   async function setPassword(token, password) {
-    const tokens = getArr(KEYS.inviteTokens);
-    const tok = tokens.find(t => t.token === token && t.expiresAt > Date.now() && !t.used);
-    if (!tok) return { ok: false, error: 'This link is invalid or has expired.' };
-    const hash = await hashPassword(password);
-    update(KEYS.users, tok.userId, { passwordHash: hash, status: 'active' }, tok.userId);
-    const tokIdx = tokens.findIndex(t => t.token === token);
-    tokens[tokIdx].used = true;
-    setArr(KEYS.inviteTokens, tokens);
-    audit(tok.userId, 'SET_PASSWORD', tok.userId);
-    return { ok: true };
+    if (SB.enabled && SB.client) {
+      const { data: res, error } = await SB.client.rpc('redeem_invite_token', { p_token: token });
+      if (error) return { ok: false, error: error.message };
+      
+      const { error: signInError } = await SB.client.auth.signInWithPassword({
+        email: res.email,
+        password: res.tempPassword
+      });
+      if (signInError) return { ok: false, error: signInError.message };
+      
+      const { error: updateError } = await SB.client.auth.updateUser({ password: password });
+      if (updateError) return { ok: false, error: updateError.message };
+      
+      await SB.client.rpc('mark_invite_token_used', { p_token: token });
+      
+      const users = getArr(KEYS.users);
+      const userIdx = users.findIndex(u => u.id === res.userId);
+      if (userIdx !== -1) {
+        users[userIdx].status = 'active';
+        setArr(KEYS.users, users);
+        SB.upsertRow(KEYS.users, users[userIdx]);
+      }
+      
+      audit(res.userId, 'SET_PASSWORD', res.userId);
+      return { ok: true };
+    } else {
+      const tokens = getArr(KEYS.inviteTokens);
+      const tok = tokens.find(t => t.token === token && t.expiresAt > Date.now() && !t.used);
+      if (!tok) return { ok: false, error: 'This link is invalid or has expired.' };
+      update(KEYS.users, tok.userId, { status: 'active' }, tok.userId);
+      const tokIdx = tokens.findIndex(t => t.token === token);
+      tokens[tokIdx].used = true;
+      setArr(KEYS.inviteTokens, tokens);
+      audit(tok.userId, 'SET_PASSWORD', tok.userId);
+      return { ok: true };
+    }
   }
 
   async function requestPasswordReset(email) {
-    const user = findAll(KEYS.users).find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (!user) return { ok: false, error: 'No account found with this email.' };
-    const token = generateId() + generateId();
-    const resets = getArr(KEYS.passwordResets);
-    resets.push({ token, userId: user.id, email: user.email, expiresAt: Date.now() + 3600 * 1000, used: false, createdAt: new Date().toISOString() });
-    setArr(KEYS.passwordResets, resets);
-    // Simulate email send — in real app calls email service
-    console.info('[EMAIL] Password reset link:', `${window.location.origin}/pages/set-password.html?reset=${token}`);
-    return { ok: true, token }; // token returned so demo can show the link
+    if (SB.enabled && SB.client) {
+      const { error } = await SB.client.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/pages/set-password.html`
+      });
+      if (error) return { ok: false, error: error.message };
+      return { ok: true };
+    } else {
+      const user = findAll(KEYS.users).find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (!user) return { ok: false, error: 'No account found with this email.' };
+      const token = generateId() + generateId();
+      const resets = getArr(KEYS.passwordResets);
+      resets.push({ token, userId: user.id, email: user.email, expiresAt: Date.now() + 3600 * 1000, used: false, createdAt: new Date().toISOString() });
+      setArr(KEYS.passwordResets, resets);
+      console.info('[EMAIL] Password reset link:', `${window.location.origin}/pages/set-password.html?reset=${token}`);
+      return { ok: true, token };
+    }
   }
 
   async function resetPassword(token, password) {
-    const resets = getArr(KEYS.passwordResets);
-    const rst = resets.find(r => r.token === token && r.expiresAt > Date.now() && !r.used);
-    if (!rst) return { ok: false, error: 'This reset link is invalid or has expired.' };
-    const hash = await hashPassword(password);
-    update(KEYS.users, rst.userId, { passwordHash: hash, status: 'active' }, rst.userId);
-    const idx = resets.findIndex(r => r.token === token);
-    resets[idx].used = true;
-    setArr(KEYS.passwordResets, resets);
-    audit(rst.userId, 'RESET_PASSWORD', rst.userId);
-    return { ok: true };
+    if (SB.enabled && SB.client) {
+      const { error } = await SB.client.auth.updateUser({ password: password });
+      if (error) return { ok: false, error: error.message };
+      const sessionObj = getSession();
+      if (sessionObj) {
+        const users = getArr(KEYS.users);
+        const userIdx = users.findIndex(u => u.id === sessionObj.userId);
+        if (userIdx !== -1) {
+          users[userIdx].status = 'active';
+          setArr(KEYS.users, users);
+          SB.upsertRow(KEYS.users, users[userIdx]);
+        }
+        audit(sessionObj.userId, 'RESET_PASSWORD', sessionObj.userId);
+      }
+      return { ok: true };
+    } else {
+      const resets = getArr(KEYS.passwordResets);
+      const rst = resets.find(r => r.token === token && r.expiresAt > Date.now() && !r.used);
+      if (!rst) return { ok: false, error: 'This reset link is invalid or has expired.' };
+      update(KEYS.users, rst.userId, { status: 'active' }, rst.userId);
+      const idx = resets.findIndex(r => r.token === token);
+      resets[idx].used = true;
+      setArr(KEYS.passwordResets, resets);
+      audit(rst.userId, 'RESET_PASSWORD', rst.userId);
+      return { ok: true };
+    }
+  }
+
+  async function logout() {
+    clearSession();
+    for (const key of Object.values(KEYS)) {
+      localStorage.removeItem(key);
+    }
+    localStorage.removeItem('sb_session');
+    localStorage.removeItem('sb_seeded');
+    if (SB.enabled && SB.client) {
+      try { await SB.client.auth.signOut(); } catch (e) { /* ignore */ }
+    }
+    window.location.href = window.location.origin + '/index.html';
   }
 
   // ── User Management ──────────────────────────────────────────
   async function createUser(data, actorId) {
-    const existing = findAll(KEYS.users).find(u => u.email.toLowerCase() === data.email.toLowerCase());
-    if (existing) return { ok: false, error: 'A user with this email already exists.' };
-    const token = generateId() + generateId();
-    const user = insert(KEYS.users, {
-      email: data.email.toLowerCase(),
-      name: data.name,
-      role: data.role,
-      departmentId: data.departmentId || null,
-      courseId: data.courseId || null,
-      status: 'invited',
-      passwordHash: null,
-      phone: data.phone || null,
-      parentEmail: data.parentEmail || null,
-      linkedStudentId: data.linkedStudentId || null,
-      classId: data.classId || null,
-    }, actorId);
-    const tokens = getArr(KEYS.inviteTokens);
-    tokens.push({ token, userId: user.id, email: user.email, expiresAt: Date.now() + 7 * 24 * 3600 * 1000, used: false, createdAt: new Date().toISOString() });
-    setArr(KEYS.inviteTokens, tokens);
-    // Simulate email
-    const link = `${window.location.origin}/pages/set-password.html?invite=${token}`;
-    console.info(`[EMAIL] Invite sent to ${user.email}: ${link}`);
-    return { ok: true, user, inviteToken: token, inviteLink: link };
+    if (SB.enabled && SB.client) {
+      const { data: res, error } = await SB.client.rpc('admin_create_user', {
+        p_email: data.email.toLowerCase(),
+        p_name: data.name,
+        p_role: data.role,
+        p_department_id: data.departmentId || null,
+        p_course_id: data.courseId || null,
+        p_class_id: data.classId || null,
+        p_parent_email: data.parentEmail || null,
+        p_linked_student_id: data.linkedStudentId || null,
+        p_phone: data.phone || null
+      });
+      if (error) return { ok: false, error: error.message };
+      const link = `${window.location.origin}/pages/set-password.html?invite=${res.token}`;
+      console.info(`[EMAIL] Invite sent: ${link}`);
+      await SB.hydrate();
+      return { ok: true, user: { id: res.userId, ...data }, inviteToken: res.token, inviteLink: link };
+    } else {
+      const existing = findAll(KEYS.users).find(u => u.email.toLowerCase() === data.email.toLowerCase());
+      if (existing) return { ok: false, error: 'A user with this email already exists.' };
+      const token = generateId() + generateId();
+      const user = insert(KEYS.users, {
+        email: data.email.toLowerCase(),
+        name: data.name,
+        role: data.role,
+        departmentId: data.departmentId || null,
+        courseId: data.courseId || null,
+        status: 'invited',
+        passwordHash: null,
+        phone: data.phone || null,
+        parentEmail: data.parentEmail || null,
+        linkedStudentId: data.linkedStudentId || null,
+        classId: data.classId || null,
+      }, actorId);
+      const tokens = getArr(KEYS.inviteTokens);
+      tokens.push({ token, userId: user.id, email: user.email, expiresAt: Date.now() + 7 * 24 * 3600 * 1000, used: false, createdAt: new Date().toISOString() });
+      setArr(KEYS.inviteTokens, tokens);
+      const link = `${window.location.origin}/pages/set-password.html?invite=${token}`;
+      console.info(`[EMAIL] Invite sent to ${user.email}: ${link}`);
+      return { ok: true, user, inviteToken: token, inviteLink: link };
+    }
   }
 
   async function bulkImportUsers(csvText, actorId) {
@@ -390,12 +621,14 @@ const DB = (() => {
 
   // ── Mentor Meetings ──────────────────────────────────────────
   const Meetings = {
-    getAll: studentId => findWhere(KEYS.mentorMeetings, m => m.studentId === studentId),
-    getBySemester: (studentId, semester) => findWhere(KEYS.mentorMeetings, m => m.studentId === studentId && m.semester === semester),
-    getByMentor: mentorId => findWhere(KEYS.mentorMeetings, m => m.mentorId === mentorId),
+    getAll: studentId => mergeSecrets(findWhere(KEYS.mentorMeetings, m => m.studentId === studentId)),
+    getBySemester: (studentId, semester) => mergeSecrets(findWhere(KEYS.mentorMeetings, m => m.studentId === studentId && m.semester === semester)),
+    getByMentor: mentorId => mergeSecrets(findWhere(KEYS.mentorMeetings, m => m.mentorId === mentorId)),
     create: (data, actor) => insert(KEYS.mentorMeetings, data, actor),
     update: (id, data, actor) => update(KEYS.mentorMeetings, id, data, actor),
-    delete: (id, actor) => remove(KEYS.mentorMeetings, id, actor),
+    delete: (id, actor) => {
+      remove(KEYS.mentorMeetings, id, actor);
+    },
     confirm: (id, actor) => update(KEYS.mentorMeetings, id, { studentConfirmed: true, confirmedAt: new Date().toISOString() }, actor),
   };
 
@@ -438,12 +671,42 @@ const DB = (() => {
 
   // ── Settings ─────────────────────────────────────────────────
   const Settings = {
-    get: () => get(KEYS.settings) || {},
+    get: () => {
+      const general = get(KEYS.settings) || {};
+      const secure = get(KEYS.secureSettings) || {};
+      // Merge emailProvider from secure settings if accessible
+      const emailProvider = { ...general.emailProvider, ...secure.emailProvider };
+      // If the current role is student or parent, strip password and apiKey
+      const session = getSession();
+      if (session && ['student', 'parent'].includes(session.role)) {
+        delete emailProvider.password;
+        delete emailProvider.apiKey;
+      }
+      return { ...general, emailProvider };
+    },
     set: (data) => {
-      const current = Settings.get();
-      const merged = { ...current, ...data };
-      set(KEYS.settings, merged);
-      SB.saveSettings(merged);
+      const current = get(KEYS.settings) || {};
+      
+      // Intercept and separate emailProvider details
+      if (data.emailProvider) {
+        const { type, fromEmail, host, port, user, password, apiKey } = data.emailProvider;
+        
+        // Save public fields in settings
+        const publicEmailProvider = { type, fromEmail };
+        const newGeneral = { ...current, ...data, emailProvider: publicEmailProvider };
+        set(KEYS.settings, newGeneral);
+        SB.saveSettings(newGeneral);
+        
+        // Save sensitive credentials in secure_settings
+        const secureEmailProvider = { type, fromEmail, host, port, user, password, apiKey };
+        const secureObj = { emailProvider: secureEmailProvider };
+        set(KEYS.secureSettings, secureObj);
+        SB.saveSecureSettings(secureObj);
+      } else {
+        const merged = { ...current, ...data };
+        set(KEYS.settings, merged);
+        SB.saveSettings(merged);
+      }
     },
     getExtraCreditCategories: () => {
       const s = Settings.get();
@@ -689,105 +952,100 @@ const DB = (() => {
     const courseBBA = Courses.create({ departmentId: deptComm.id, name: 'BBA', code: 'BBA', semesterCount: 6 }, 'system');
 
     // Users: Admin
-    const adminHash = await hashPassword('Admin@1234');
     const adminUser = insert(KEYS.users, {
+      id: 'a1a1a1a1-a1a1-41a1-a1a1-a1a1a1a1a111',
       email: 'admin@sbc.edu',
       name: 'Dr. George Mathew',
       role: 'admin',
       status: 'active',
-      passwordHash: adminHash,
       departmentId: null,
       courseId: null,
     }, 'system');
 
     // Users: Mentors
-    const m1Hash = await hashPassword('Mentor@123');
     const mentor1 = insert(KEYS.users, {
+      id: 'b1b1b1b1-b1b1-41b1-b1b1-b1b1b1b1b111',
       email: 'mentor.priya@sbc.edu',
       name: 'Dr. Priya Nair',
       role: 'mentor',
       status: 'active',
-      passwordHash: m1Hash,
       departmentId: deptSci.id,
       courseId: null,
     }, 'system');
 
     const mentor2 = insert(KEYS.users, {
+      id: 'b2b2b2b2-b2b2-42b2-b2b2-b2b2b2b2b222',
       email: 'mentor.joseph@sbc.edu',
       name: 'Prof. Joseph Thomas',
       role: 'mentor',
       status: 'active',
-      passwordHash: m1Hash,
       departmentId: deptArts.id,
       courseId: null,
     }, 'system');
 
     // Users: HOD
-    const hodHash = await hashPassword('HOD@1234');
     const hod1 = insert(KEYS.users, {
+      id: 'c1c1c1c1-c1c1-41c1-c1c1-c1c1c1c1c111',
       email: 'hod.science@sbc.edu',
       name: 'Dr. Rajan Varghese',
       role: 'hod',
       status: 'active',
-      passwordHash: hodHash,
       departmentId: deptSci.id,
       courseId: null,
     }, 'system');
 
     // Users: Students
-    const stuHash = await hashPassword('Student@123');
     const student1 = insert(KEYS.users, {
+      id: 'd1d1d1d1-d1d1-41d1-d1d1-d1d1d1d1d111',
       email: 'anjali.krishna@gmail.com',
       name: 'Anjali Krishna',
       role: 'student',
       status: 'active',
-      passwordHash: stuHash,
       departmentId: deptSci.id,
       courseId: courseBSc.id,
       parentEmail: 'krishna.parent@gmail.com',
     }, 'system');
 
     const student2 = insert(KEYS.users, {
+      id: 'd2d2d2d2-d2d2-42d2-d2d2-d2d2d2d2d222',
       email: 'rahul.menon@gmail.com',
       name: 'Rahul Menon',
       role: 'student',
       status: 'active',
-      passwordHash: stuHash,
       departmentId: deptSci.id,
       courseId: courseBSc.id,
       parentEmail: 'menon.parent@gmail.com',
     }, 'system');
 
     const student3 = insert(KEYS.users, {
+      id: 'd3d3d3d3-d3d3-43d3-d3d3-d3d3d3d3d333',
       email: 'sneha.pillai@gmail.com',
       name: 'Sneha Pillai',
       role: 'student',
       status: 'active',
-      passwordHash: stuHash,
       departmentId: deptArts.id,
       courseId: courseMAEng.id,
       parentEmail: 'pillai.parent@gmail.com',
     }, 'system');
 
     const student4 = insert(KEYS.users, {
+      id: 'd4d4d4d4-d4d4-44d4-d4d4-d4d4d4d4d444',
       email: 'arjun.babu@gmail.com',
       name: 'Arjun Babu',
       role: 'student',
       status: 'active',
-      passwordHash: stuHash,
       departmentId: deptSci.id,
       courseId: courseBSc.id,
       parentEmail: 'babu.parent@gmail.com',
     }, 'system');
 
     // Users: Parent
-    const parentHash = await hashPassword('Parent@123');
     const parent1 = insert(KEYS.users, {
+      id: 'e1e1e1e1-e1e1-41e1-e1e1-e1e1e1e1e111',
       email: 'krishna.parent@gmail.com',
       name: 'Mr. Suresh Krishna',
       role: 'parent',
       status: 'active',
-      passwordHash: parentHash,
       linkedStudentId: student1.id,
       departmentId: null,
       courseId: null,

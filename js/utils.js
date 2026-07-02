@@ -129,7 +129,7 @@ const Str = {
   initials: (name = '') => name.split(' ').slice(0, 2).map(p => p[0] || '').join('').toUpperCase() || '?',
   capitalize: s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '',
   truncate: (s = '', len = 60) => s.length > len ? s.slice(0, len) + '…' : s,
-  escHtml: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+  escHtml: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'),
 };
 
 // ── Icon Helper ──────────────────────────────────────────────
@@ -193,9 +193,10 @@ const Theme = {
 };
 
 // ── Avatar Render ─────────────────────────────────────────────
-function renderAvatar(name, size = 'md', photoUrl = null) {
-  if (photoUrl) return `<img src="${photoUrl}" class="avatar avatar-${size}" alt="${Str.escHtml(name)}">`;
-  return `<div class="avatar-placeholder avatar-${size}">${Str.initials(name)}</div>`;
+function renderAvatar(name, size = 'md', photoUrl = null, viewTransitionId = null) {
+  const style = viewTransitionId ? ` style="view-transition-name: avatar-${viewTransitionId}"` : '';
+  if (photoUrl) return `<img src="${photoUrl}" class="avatar avatar-${size}" alt="${Str.escHtml(name)}"${style}>`;
+  return `<div class="avatar-placeholder avatar-${size}"${style}>${Str.initials(name)}</div>`;
 }
 
 // ── Status Badge ──────────────────────────────────────────────
@@ -208,6 +209,20 @@ function renderStatusBadge(status) {
   };
   const { cls, label } = map[status] || map.gray;
   return `<span class="badge ${cls}"><span class="status-dot"></span>${label}</span>`;
+}
+
+// ── Attendance Ring ──────────────────────────────────────────
+function renderAttendanceRing(percent) {
+  const num = parseFloat(percent) || 0;
+  return `
+    <div class="attendance-ring-container" style="position:relative;width:40px;height:40px;display:inline-flex;align-items:center;justify-content:center;">
+      <svg width="40" height="40" viewBox="0 0 40 40" style="transform: rotate(-90deg);display:block;">
+        <circle cx="20" cy="20" r="16" stroke="var(--bg-surface-3, #e2e8f0)" stroke-width="3.5" fill="none" />
+        <circle class="attendance-ring-path" data-percent="${num}" cx="20" cy="20" r="16" stroke="var(--primary-color)" stroke-width="3.5" fill="none" stroke-linecap="round" />
+      </svg>
+      <span style="position:absolute;font-size:10px;font-weight:bold;color:var(--text-primary)">${Math.round(num)}%</span>
+    </div>
+  `;
 }
 
 // ── Role Label (display names for hierarchy) ──────────────────
@@ -277,7 +292,14 @@ class SignatureCanvas {
 function exportCSV(rows, filename = 'export.csv') {
   if (!rows.length) return;
   const headers = Object.keys(rows[0]);
-  const csv = [headers.join(','), ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))].join('\n');
+  const sanitize = val => {
+    let s = String(val ?? '');
+    if (s.startsWith('=') || s.startsWith('+') || s.startsWith('-') || s.startsWith('@') || s.startsWith('\t') || s.startsWith('\r')) {
+      s = "'" + s;
+    }
+    return JSON.stringify(s);
+  };
+  const csv = [headers.join(','), ...rows.map(r => headers.map(h => sanitize(r[h])).join(','))].join('\n');
   const a = document.createElement('a');
   a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
   a.download = filename;
@@ -317,7 +339,7 @@ const PDFGen = {
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Mentor File — ${student.name}</title>
+        <title>Mentor File — ${Str.escHtml(student.name)}</title>
         <style>
           * { box-sizing: border-box; }
           body { font-family: Georgia, 'Times New Roman', serif; color: #1f2937; margin: 0; padding: 30px 30px; font-size: 12px; }
@@ -356,7 +378,7 @@ const PDFGen = {
       </head>
       <body>
         <div class="header">
-          ${logoData ? `<img class="logo" src="${logoData}" alt="College logo">` : `<div class="brand-name">${collegeInfo.name}</div>`}
+          ${logoData ? `<img class="logo" src="${logoData}" alt="College logo">` : `<div class="brand-name">${Str.escHtml(collegeInfo.name)}</div>`}
           <div class="doc-badge">
             <div class="doc-title">MENTOR'S FILE</div>
             <div class="doc-year">Academic Year ${DateFmt.currentYear()}–${DateFmt.currentYear() + 1}</div>
@@ -370,24 +392,45 @@ const PDFGen = {
           <div class="box"><div class="n">${ov.total}</div><div class="l">Semesters</div></div>
           <div class="box"><div class="n">${ov.passed}</div><div class="l">Passed</div></div>
           <div class="box"><div class="n">${ov.failed}</div><div class="l">Failed</div></div>
-          <div class="box"><div class="n">${semRecords[semRecords.length-1]?.attendance ?? '—'}${semRecords[semRecords.length-1]?.attendance!=null?'%':''}</div><div class="l">Latest Attendance</div></div>
+          <div class="box"><div class="n">${Str.escHtml(semRecords[semRecords.length-1]?.attendance ?? '—')}${semRecords[semRecords.length-1]?.attendance!=null?'%':''}</div><div class="l">Latest Attendance</div></div>
         </div>
 
         <h2>A. Personal Details</h2>
         <div class="grid2">
-          ${[['Name', student.name], ['Roll No.', profile.rollNo || '—'], ['Department', dept?.name || '—'], ['Course', course?.name || '—'], ['Class', profile.className || '—'], ['Blood Group', profile.bloodGroup || '—'], ['Religion', profile.religion || '—'], ['Community', profile.community || '—'], ['Residence', profile.residenceType === 'hosteler' ? `Hosteler (${profile.hostelName || ''})` : 'Day Scholar'], ['Life Goal', profile.lifeGoal || '—'], ['Hobbies', profile.hobbies || '—'], ['Mentor', mentor?.name || '—']].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('')}
+          ${[
+            ['Name', student.name],
+            ['Roll No.', profile.rollNo || '—'],
+            ['Department', dept?.name || '—'],
+            ['Course', course?.name || '—'],
+            ['Class', profile.className || '—'],
+            ['Blood Group', profile.bloodGroup || '—'],
+            ['Religion', profile.religion || '—'],
+            ['Community', profile.community || '—'],
+            ['Residence', profile.residenceType === 'hosteler' ? `Hosteler (${profile.hostelName || ''})` : 'Day Scholar'],
+            ['Life Goal', profile.lifeGoal || '—'],
+            ['Hobbies', profile.hobbies || '—'],
+            ['Mentor', mentor?.name || '—']
+          ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
         </div>
 
         <h2>B. Family Details</h2>
         <div class="grid2">
-          ${[["Father's Name", profile.fatherName || '—'], ["Father's Occupation", profile.fatherOccupation || '—'], ["Father's Phone", profile.fatherPhone || '—'], ["Mother's Name", profile.motherName || '—'], ["Mother's Occupation", profile.motherOccupation || '—'], ["Permanent Address", profile.permanentAddress || '—'], ["Communication Address", profile.communicationAddress || '—']].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('')}
+          ${[
+            ["Father's Name", profile.fatherName || '—'],
+            ["Father's Occupation", profile.fatherOccupation || '—'],
+            ["Father's Phone", profile.fatherPhone || '—'],
+            ["Mother's Name", profile.motherName || '—'],
+            ["Mother's Occupation", profile.motherOccupation || '—'],
+            ["Permanent Address", profile.permanentAddress || '—'],
+            ["Communication Address", profile.communicationAddress || '—']
+          ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
         </div>
 
         <h2>C. Entry Qualifications</h2>
         <table>
           <tr><th>Exam</th><th>School/Board</th><th>Percentage</th><th>Grade</th></tr>
-          <tr><td>SSLC</td><td>${profile.sslcSchool || '—'}</td><td>${profile.sslcPercentage || '—'}</td><td>${profile.sslcGrade || '—'}</td></tr>
-          <tr><td>Plus Two (+2)</td><td>${profile.plusTwoSchool || '—'}</td><td>${profile.plusTwoPercentage || '—'}</td><td>${profile.plusTwoGrade || '—'}</td></tr>
+          <tr><td>SSLC</td><td>${Str.escHtml(profile.sslcSchool || '—')}</td><td>${Str.escHtml(profile.sslcPercentage || '—')}</td><td>${Str.escHtml(profile.sslcGrade || '—')}</td></tr>
+          <tr><td>Plus Two (+2)</td><td>${Str.escHtml(profile.plusTwoSchool || '—')}</td><td>${Str.escHtml(profile.plusTwoPercentage || '—')}</td><td>${Str.escHtml(profile.plusTwoGrade || '—')}</td></tr>
         </table>
 
         <h2>D. Academic Performance & Attendance</h2>
@@ -395,30 +438,30 @@ const PDFGen = {
           <tr><th>Semester</th><th>Grade Point</th><th>Grade</th><th>Attendance %</th><th>Remarks</th></tr>
           ${Array.from({ length: semCount }, (_, i) => {
             const r = semRecords.find(r => r.semester === i + 1);
-            return `<tr><td>Semester ${i + 1}</td><td>${r?.gradePoint || '—'}</td><td>${r?.grade || '—'}</td><td>${r?.attendance ? r.attendance + '%' : '—'}</td><td>${r?.remarks || '—'}</td></tr>`;
+            return `<tr><td>Semester ${i + 1}</td><td>${Str.escHtml(r?.gradePoint || '—')}</td><td>${Str.escHtml(r?.grade || '—')}</td><td>${r?.attendance ? r.attendance + '%' : '—'}</td><td>${Str.escHtml(r?.remarks || '—')}</td></tr>`;
           }).join('')}
         </table>
 
         <h2>E. Mentor Meeting Log</h2>
         <table>
           <tr><th>Semester</th><th>Date</th><th>Notes</th><th>Student Confirmed</th></tr>
-          ${meetings.map(m => `<tr><td>Sem ${m.semester}</td><td>${DateFmt.format(m.date)}</td><td>${m.notes || '—'}</td><td>${m.studentConfirmed ? '✓ Yes' : 'Pending'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No meetings recorded</td></tr>'}
+          ${meetings.map(m => `<tr><td>Sem ${m.semester}</td><td>${DateFmt.format(m.date)}</td><td>${Str.escHtml(m.notes || '—')}</td><td>${m.studentConfirmed ? '✓ Yes' : 'Pending'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No meetings recorded</td></tr>'}
         </table>
 
         <h2>F. PTA Meeting Log</h2>
         <table>
           <tr><th>Semester</th><th>Date</th><th>Notes</th><th>Parent Acknowledged</th></tr>
-          ${ptaMeetings.map(m => `<tr><td>Sem ${m.semester}</td><td>${DateFmt.format(m.date)}</td><td>${m.notes || '—'}</td><td>${m.parentAcknowledged ? '✓ Yes' : 'Pending'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No PTA meetings recorded</td></tr>'}
+          ${ptaMeetings.map(m => `<tr><td>Sem ${m.semester}</td><td>${DateFmt.format(m.date)}</td><td>${Str.escHtml(m.notes || '—')}</td><td>${m.parentAcknowledged ? '✓ Yes' : 'Pending'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No PTA meetings recorded</td></tr>'}
         </table>
 
         <h2>G. Co-Curricular Achievements</h2>
         <table>
           <tr><th>Semester</th><th>Date</th><th>Achievement</th><th>Category</th></tr>
-          ${achievements.map(a => `<tr><td>Sem ${a.semester}</td><td>${DateFmt.format(a.date)}</td><td>${a.title}</td><td>${a.category}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No achievements recorded</td></tr>'}
+          ${achievements.map(a => `<tr><td>Sem ${a.semester}</td><td>${DateFmt.format(a.date)}</td><td>${Str.escHtml(a.title)}</td><td>${Str.escHtml(a.category)}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No achievements recorded</td></tr>'}
         </table>
 
         <div class="footer">
-          Generated by MentorFile — ${collegeInfo.name} · ${new Date().toLocaleString('en-IN')} · This is a digitally generated document.
+          Generated by MentorFile — ${Str.escHtml(collegeInfo.name)} · ${new Date().toLocaleString('en-IN')} · This is a digitally generated document.
         </div>
       </body>
       </html>`;
@@ -474,10 +517,10 @@ const StudentReport = {
         </div>` : '';
       return `<tr>
           <td>Sem ${i + 1}</td>
-          <td>${r.gradePoint || '—'}</td>
-          <td>${r.grade || '—'}</td>
-          <td>${r.attendance ? r.attendance + '%' : '—'}</td>
-          <td style="white-space:normal;font-size:11px">${r.remarks || '—'}</td>
+          <td>${Str.escHtml(r.gradePoint || '—')}</td>
+          <td>${Str.escHtml(r.grade || '—')}</td>
+          <td>${r.attendance ? Str.escHtml(r.attendance) + '%' : '—'}</td>
+          <td style="white-space:normal;font-size:11px">${Str.escHtml(r.remarks || '—')}</td>
         </tr>${subjTable ? `<tr><td colspan="5" style="padding:0">${subjTable}</td></tr>` : ''}`;
     }).join('');
 
@@ -514,10 +557,10 @@ const StudentReport = {
       ${['mentor','hod','principal','admin','teacher'].includes(viewerRole) ? `
       <h3 style="font-size:var(--font-size-sm);font-weight:700;margin:var(--space-5) 0 var(--space-2)">Parent Details</h3>
       <div class="text-sm" style="color:var(--text-secondary)">
-        <div>Parent: <strong>${parent ? Str.escHtml(parent.name) : (profile.fatherName || '—')}</strong></div>
-        <div>Email: ${student.parentEmail || (parent ? parent.email : '—')}</div>
+        <div>Parent: <strong>${parent ? Str.escHtml(parent.name) : (profile.fatherName ? Str.escHtml(profile.fatherName) : '—')}</strong></div>
+        <div>Email: ${Str.escHtml(student.parentEmail || (parent ? parent.email : '—'))}</div>
         <div>Access approved: ${student.parentApproved ? 'Yes' : 'No'}</div>
-        <div>Phone: ${profile.fatherPhone || '—'}</div>
+        <div>Phone: ${profile.fatherPhone ? Str.escHtml(profile.fatherPhone) : '—'}</div>
       </div>` : ''}`;
   },
 

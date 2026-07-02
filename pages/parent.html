@@ -2,10 +2,12 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://wzqraqooarfoxkinuyic.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://wzqraqooarfoxkinuyic.supabase.co; connect-src 'self' https://wzqraqooarfoxkinuyic.supabase.co;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../SB Logo.png">
   <title>Parent Portal — MentorFile</title>
   <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="../css/motion.css">
   <style>
     .parent-container {
       max-width: 800px;
@@ -43,7 +45,19 @@
       </div>
       <div class="section-card-body">
         <div id="ward-info">
-          <div class="page-loader"><div class="loading-spinner"></div></div>
+          <div class="page-loader">
+            <div style="width:100%;display:flex;flex-direction:column;gap:var(--space-4);">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--space-4);">
+                <div style="height:50px;border-radius:4px;" class="skeleton-shimmer"></div>
+                <div style="height:50px;border-radius:4px;" class="skeleton-shimmer"></div>
+                <div style="height:50px;border-radius:4px;" class="skeleton-shimmer"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--space-4);">
+                <div style="height:50px;border-radius:4px;" class="skeleton-shimmer"></div>
+                <div style="height:50px;border-radius:4px;" class="skeleton-shimmer"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -83,10 +97,13 @@
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase.js"></script>
   <script src="../js/supabase-config.js"></script>
   <script src="../js/db.js"></script>
   <script src="../js/utils.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/Flip.min.js" integrity="sha512-omCJ8S/xl+DUjxNTqvhVSptHwIEi0IDp52n63HEj8ThJgSK/8Lcpi9btnTdE8db+Y4cDKZrZ7NQZBX4PKN4i4g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="../js/motion.js"></script>
   <script>
     let session;
     let ward = null;
@@ -100,61 +117,63 @@
     });
 
     function loadWardDetails() {
-      // Find linked student
-      ward = DB.Users.getById(session.linkedStudentId);
-      if (!ward) {
-        // Fallback: search by parentEmail
-        ward = DB.Users.getAll().find(u => u.parentEmail === session.email && u.role === 'student');
-      }
+      Motion.transition(document.querySelector('.parent-container'), () => {
+        // Find linked student
+        ward = DB.Users.getById(session.linkedStudentId);
+        if (!ward) {
+          // Fallback: search by parentEmail
+          ward = DB.Users.getAll().find(u => u.parentEmail === session.email && u.role === 'student');
+        }
 
-      if (!ward) {
-        document.getElementById('ward-info').innerHTML = `<div class="alert alert-error">No linked student account was found. Please contact administration.</div>`;
-        return;
-      }
+        if (!ward) {
+          document.getElementById('ward-info').innerHTML = `<div class="alert alert-error">No linked student account was found. Please contact administration.</div>`;
+          return;
+        }
 
-      // Access gate: parent may only view once approved by staff
-      if (!ward.parentApproved) {
-        document.getElementById('ward-info').innerHTML = `<div class="alert alert-warning">${Icons.alert}<div>Your access to <strong>${ward.name}</strong>'s records is <strong>pending approval</strong> by the school (Teacher / HOD / Principal / Admin). You'll be able to view the report once approved.</div></div>`;
-        document.getElementById('grades-tbody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">Locked until access is approved.</td></tr>`;
-        document.getElementById('pta-tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">Locked until access is approved.</td></tr>`;
-        return;
-      }
+        // Access gate: parent may only view once approved by staff
+        if (!ward.parentApproved) {
+          document.getElementById('ward-info').innerHTML = `<div class="alert alert-warning">${Icons.alert}<div>Your access to <strong>${ward.name}</strong>'s records is <strong>pending approval</strong> by the school (Teacher / HOD / Principal / Admin). You'll be able to view the report once approved.</div></div>`;
+          document.getElementById('grades-tbody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">Locked until access is approved.</td></tr>`;
+          document.getElementById('pta-tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">Locked until access is approved.</td></tr>`;
+          return;
+        }
 
-      // Ward info Card
-      const profile = DB.Profiles.get(ward.id) || {};
-      const course = DB.Courses.getById(ward.courseId);
-      const mentorId = DB.Assignments.getMentor(ward.id);
-      const mentor = mentorId ? DB.Users.getById(mentorId) : null;
+        // Ward info Card
+        const profile = DB.Profiles.get(ward.id) || {};
+        const course = DB.Courses.getById(ward.courseId);
+        const mentorId = DB.Assignments.getMentor(ward.id);
+        const mentor = mentorId ? DB.Users.getById(mentorId) : null;
 
-      document.getElementById('ward-info').innerHTML = `
-        <div class="form-grid">
-          <div class="form-group"><label class="form-label">Name of Student</label><div class="form-input" style="background:var(--bg-surface-2)">${ward.name}</div></div>
-          <div class="form-group"><label class="form-label">Roll Number</label><div class="form-input" style="background:var(--bg-surface-2)">${profile.rollNo || '—'}</div></div>
-          <div class="form-group"><label class="form-label">Course / Program</label><div class="form-input" style="background:var(--bg-surface-2)">${course?.name || '—'}</div></div>
-        </div>
-        <div class="form-grid">
-          <div class="form-group"><label class="form-label">Assigned Mentor</label><div class="form-input" style="background:var(--bg-surface-2)">${mentor ? mentor.name + ' (' + mentor.email + ')' : 'Not Assigned'}</div></div>
-          <div class="form-group"><label class="form-label">Class Year</label><div class="form-input" style="background:var(--bg-surface-2)">${profile.className || '—'}</div></div>
-        </div>
-        <button class="btn btn-primary btn-sm mt-4" onclick="StudentReport.show('${ward.id}','parent')">${Icons.fileText} View Full Report</button>`;
+        document.getElementById('ward-info').innerHTML = `
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Name of Student</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(ward.name)}</div></div>
+            <div class="form-group"><label class="form-label">Roll Number</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(profile.rollNo || '—')}</div></div>
+            <div class="form-group"><label class="form-label">Course / Program</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(course?.name || '—')}</div></div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Assigned Mentor</label><div class="form-input" style="background:var(--bg-surface-2)">${mentor ? Str.escHtml(mentor.name + ' (' + mentor.email + ')') : 'Not Assigned'}</div></div>
+            <div class="form-group"><label class="form-label">Class Year</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(profile.className || '—')}</div></div>
+          </div>
+          <button class="btn btn-primary btn-sm mt-4 hover-lift press-scale" onclick="StudentReport.show('${ward.id}','parent')">${Icons.fileText} View Full Report</button>`;
 
-      // Grades table
-      const recs = DB.SemesterRecords.getAll(ward.id);
-      const semsCount = course ? course.semesterCount : 6;
-      document.getElementById('grades-tbody').innerHTML = Array.from({ length: semsCount }, (_, i) => {
-        const r = recs.find(rc => rc.semester === i + 1);
-        return `
-          <tr>
-            <td>Semester ${i + 1}</td>
-            <td>${r?.gradePoint || '—'}</td>
-            <td>${r?.grade || '—'}</td>
-            <td>${r?.attendance ? r.attendance + '%' : '—'}</td>
-            <td style="white-space:normal">${r?.remarks || 'No remarks logged.'}</td>
-          </tr>`;
-      }).join('');
+        // Grades table
+        const recs = DB.SemesterRecords.getAll(ward.id);
+        const semsCount = course ? course.semesterCount : 6;
+        document.getElementById('grades-tbody').innerHTML = Array.from({ length: semsCount }, (_, i) => {
+          const r = recs.find(rc => rc.semester === i + 1);
+          return `
+            <tr>
+              <td>Semester ${i + 1}</td>
+              <td>${Str.escHtml(r?.gradePoint || '—')}</td>
+              <td>${Str.escHtml(r?.grade || '—')}</td>
+              <td>${r?.attendance ? Str.escHtml(r.attendance) + '%' : '—'}</td>
+              <td style="white-space:normal">${Str.escHtml(r?.remarks || 'No remarks logged.')}</td>
+            </tr>`;
+        }).join('');
 
-      // PTA table
-      renderPtaLogs();
+        // PTA table
+        renderPtaLogs();
+      });
     }
 
     function renderPtaLogs() {
@@ -163,11 +182,11 @@
         <tr>
           <td>Sem ${m.semester}</td>
           <td>${DateFmt.format(m.date)}</td>
-          <td style="white-space:normal;max-width:300px">${m.notes}</td>
+          <td style="white-space:normal;max-width:300px">${Str.escHtml(m.notes)}</td>
           <td>
             ${m.parentAcknowledged 
               ? `<span class="badge badge-green">${Icons.check} Digitally Acknowledged</span>` 
-              : `<button class="btn btn-primary btn-sm" onclick="showAcknowledgeCanvas('${m.id}')">Acknowledge / Sign</button>`}
+              : `<button class="btn btn-primary btn-sm hover-lift press-scale" onclick="showAcknowledgeCanvas('${m.id}')">Acknowledge / Sign</button>`}
           </td>
         </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No PTA meetings registered.</td></tr>';
     }

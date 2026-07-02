@@ -2,6 +2,7 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://wzqraqooarfoxkinuyic.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://wzqraqooarfoxkinuyic.supabase.co; connect-src 'self' https://wzqraqooarfoxkinuyic.supabase.co;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="MentorFile — Digital College Mentorship System for St. Berchmans College. Secure login for Admin, Mentor, HOD, Student, and Parent.">
   <title>Login — MentorFile | St. Berchmans College</title>
@@ -11,6 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/motion.css">
   <style>
     .auth-tabs {
       display: flex;
@@ -65,13 +67,16 @@
 
   <div class="auth-page">
     <!-- Left Branding Panel -->
-    <div class="auth-panel-left" style="background-image: linear-gradient(rgba(15,23,42,0.78), rgba(15,23,42,0.86)), url('SB Background Image.jpg'); background-size: cover; background-position: center;">
-      <div class="auth-brand">
-        <img src="SB Logo.png" alt="St. Berchmans College" id="college-logo-brand" style="height:72px;">
-      </div>
+    <div class="auth-panel-left" style="position:relative;overflow:hidden;">
+      <div class="auth-bg-zoom" style="position:absolute;inset:0;background-image:linear-gradient(rgba(15,23,42,0.78), rgba(15,23,42,0.86)), url('SB Background Image.jpg');background-size:cover;background-position:center;z-index:1;"></div>
+      <div style="position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:space-between;width:100%;">
+        <div class="auth-brand">
+          <img src="SB Logo.png" alt="St. Berchmans College" id="college-logo-brand" style="height:72px;">
+        </div>
 
-      <div class="auth-hero">
-        <div class="auth-hero-tagline">The <span>Digital</span><br>Mentor's File</div>
+        <div class="auth-hero">
+          <div class="auth-hero-tagline">The <span>Digital</span><br>Mentor's File</div>
+        </div>
       </div>
     </div>
 
@@ -116,17 +121,17 @@
         <p style="font-size:var(--font-size-xs);color:var(--text-tertiary)">
           Don't have an account? Your institution admin will send you an invite email.
         </p>
-        <p style="font-size:11px;color:var(--text-tertiary);margin-top:var(--space-3)">
-          <a href="#" class="auth-link" onclick="resetDemoData();return false;">Reset demo data</a> — reloads fresh sample data (needed after an update).
-        </p>
       </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.js"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/db.js"></script>
   <script src="js/utils.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/Flip.min.js" integrity="sha512-omCJ8S/xl+DUjxNTqvhVSptHwIEi0IDp52n63HEj8ThJgSK/8Lcpi9btnTdE8db+Y4cDKZrZ7NQZBX4PKN4i4g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="js/motion.js"></script>
   <script>
     // Redirect if already logged in
     if (DB.isSessionValid()) {
@@ -157,6 +162,26 @@
             .catch(err => console.error('[PWA] Service Worker registration failed: ', err));
         });
       }
+
+      // Stagger cascade right panel elements on load
+      if (!Motion.isReduced() && window.gsap) {
+        window.gsap.from([
+          '.auth-form-header h2',
+          '.auth-form-header p',
+          '#login-form .form-group:nth-of-type(1)',
+          '#login-form .form-group:nth-of-type(2)',
+          '.auth-form-actions',
+          '#login-btn',
+          '.auth-panel-right > div:last-child'
+        ], {
+          y: 24,
+          opacity: 0,
+          duration: 0.4,
+          stagger: 0.08,
+          ease: 'power2.out',
+          clearProps: 'all'
+        });
+      }
     });
 
     function resetDemoData() {
@@ -180,21 +205,65 @@
 
       errEl.style.display = 'none';
       btn.disabled = true;
-      btn.innerHTML = `<span class="loading-spinner"></span> Signing in…`;
+
+      // Morph button to loading spinner state
+      if (!Motion.isReduced() && window.gsap) {
+        window.gsap.to(btn, {
+          width: '48px',
+          borderRadius: '50%',
+          padding: '0',
+          duration: 0.24,
+          ease: 'power2.out',
+          onComplete: () => {
+            btn.innerHTML = `<div class="loading-spinner" style="margin:0 auto;"></div>`;
+          }
+        });
+      } else {
+        btn.innerHTML = `<span class="loading-spinner"></span> Signing in…`;
+      }
 
       const result = await DB.login(email, password);
 
-      btn.disabled = false;
-      btn.innerHTML = 'Sign In';
-
       if (!result.ok) {
+        // Revert button styling
+        if (!Motion.isReduced() && window.gsap) {
+          btn.innerHTML = 'Sign In';
+          window.gsap.to(btn, {
+            width: '100%',
+            borderRadius: 'var(--border-radius-lg)',
+            padding: 'var(--space-3) var(--space-4)',
+            duration: 0.24,
+            ease: 'power2.out',
+            onComplete: () => {
+              btn.disabled = false;
+            }
+          });
+        } else {
+          btn.disabled = false;
+          btn.innerHTML = 'Sign In';
+        }
+
         errEl.style.display = 'flex';
-        errEl.innerHTML = `<div class="auth-error">${Icons.alert} ${result.error}</div>`;
+        errEl.innerHTML = `<div class="auth-error">${Icons.alert} ${Str.escHtml(result.error)}</div>`;
+        
+        // Add form shake on validation error
+        const formEl = document.getElementById('login-form');
+        formEl.classList.remove('shake-error');
+        void formEl.offsetWidth; // Trigger reflow
+        formEl.classList.add('shake-error');
+        setTimeout(() => formEl.classList.remove('shake-error'), 480);
         return;
       }
 
+      // Success checkmark animation and redirect
       Toast.success('Welcome back!', `Signed in as ${result.user.name}`);
-      setTimeout(() => redirectToRoleDashboard(result.session.role), 500);
+      if (!Motion.isReduced() && window.gsap) {
+        Motion.successCheck(btn, () => {
+          setTimeout(() => redirectToRoleDashboard(result.session.role), 320);
+        });
+      } else {
+        setTimeout(() => redirectToRoleDashboard(result.session.role), 500);
+      }
     }
   </script>
 </body>

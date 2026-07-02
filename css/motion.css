@@ -1,0 +1,217 @@
+/* ============================================================
+   Motion & Animation System Tokens and Utilities
+   ============================================================ */
+
+:root {
+  /* Easings */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
+  /* Durations */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --dur-4: 480ms;
+}
+
+/* Micro-interactions */
+
+/* Gentle hover lift + shadow */
+.hover-lift {
+  transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out) !important;
+}
+.hover-lift:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025) !important;
+}
+
+/* Press-scale click feedback */
+.press-scale {
+  transition: transform var(--dur-1) var(--ease-out) !important;
+}
+.press-scale:active {
+  transform: scale(0.97) !important;
+}
+
+/* Faint sheen sweep on hover for primary/accent buttons */
+.btn-sheen {
+  position: relative;
+  overflow: hidden;
+}
+.btn-sheen::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -150%;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: skewX(-25deg);
+  pointer-events: none;
+}
+.btn-sheen:hover::after {
+  left: 150%;
+  transition: left var(--dur-4) var(--ease-in-out);
+}
+
+/* Border grow on focus for inputs */
+.form-input, .form-textarea, .form-select {
+  transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out) !important;
+}
+
+/* Shake on validation error */
+.shake-error {
+  animation: shake var(--dur-3) var(--ease-in-out);
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+
+/* Floating labels / focus indicators */
+.floating-group {
+  position: relative;
+}
+
+/* Chevron rotates on expand/collapse */
+.chevron-rotate {
+  transition: transform var(--dur-2) var(--ease-out) !important;
+}
+.chevron-rotate.collapsed {
+  transform: rotate(-90deg) !important;
+}
+
+/* Modal Custom Overrides */
+.modal-overlay {
+  transition: opacity var(--dur-3) var(--ease-out), visibility var(--dur-3) var(--ease-out), backdrop-filter var(--dur-3) var(--ease-out) !important;
+}
+.modal {
+  transform: scale(0.98) translateY(8px) !important;
+  opacity: 0;
+  transition: transform var(--dur-3) var(--ease-spring), opacity var(--dur-3) var(--ease-out) !important;
+}
+.modal-overlay.open .modal {
+  transform: scale(1) translateY(0) !important;
+  opacity: 1 !important;
+}
+
+/* Skeleton shimmer placeholders */
+.skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(229, 231, 235, 0.5) 25%,
+    rgba(209, 213, 219, 0.6) 37%,
+    rgba(229, 231, 235, 0.5) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-sweep 1.4s ease infinite;
+  border-radius: 4px;
+  color: transparent !important;
+  pointer-events: none;
+}
+[data-theme="dark"] .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(55, 65, 81, 0.5) 25%,
+    rgba(75, 85, 99, 0.6) 37%,
+    rgba(55, 65, 81, 0.5) 63%
+  );
+  background-size: 400% 100%;
+}
+@keyframes skeleton-sweep {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* SVG checkmark drawing */
+.svg-checkmark-path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: draw-check var(--dur-3) var(--ease-out) forwards;
+}
+@keyframes draw-check {
+  to { stroke-dashoffset: 0; }
+}
+
+/* Default View Transitions Animations (progressive enhancement) */
+::view-transition-old(root) {
+  animation: var(--dur-2) cubic-bezier(0.4, 0, 1, 1) both fade-out,
+             var(--dur-3) var(--ease-in-out) both slide-to-left;
+}
+::view-transition-new(root) {
+  animation: var(--dur-3) var(--ease-out) both fade-in,
+             var(--dur-3) var(--ease-in-out) both slide-from-right;
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes slide-to-left {
+  to { transform: translateX(-10px); }
+}
+@keyframes slide-from-right {
+  from { transform: translateX(10px); }
+}
+
+/* Tab gliders and Active Pills */
+.active-pill-background {
+  position: absolute;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--dur-3) var(--ease-out);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.active-tab-underline {
+  position: absolute;
+  height: 2px;
+  background: var(--primary-color);
+  bottom: 0;
+  transition: all var(--dur-3) var(--ease-out);
+  pointer-events: none;
+}
+
+/* Ken Burns background zoom for login hero */
+.auth-bg-zoom {
+  animation: ken-burns 12s cubic-bezier(0.22, 1, 0.36, 1) infinite alternate;
+}
+@keyframes ken-burns {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.15); }
+}
+
+/* Global Prefers Reduced Motion Guard */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-delay: -1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    background-attachment: initial !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+  }
+  
+  /* Disable view transitions */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

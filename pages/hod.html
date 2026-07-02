@@ -2,10 +2,12 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://wzqraqooarfoxkinuyic.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://wzqraqooarfoxkinuyic.supabase.co; connect-src 'self' https://wzqraqooarfoxkinuyic.supabase.co;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../SB Logo.png">
   <title>HOD / Principal — MentorFile</title>
   <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="../css/motion.css">
   <style>
     .analytics-row { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-6); margin-bottom: var(--space-8); }
     .back-btn { margin-bottom: var(--space-5); }
@@ -36,14 +38,31 @@
           <button class="header-btn" onclick="showNotifications()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span class="badge" id="notif-badge" style="display:none">0</span></button>
         </div>
       </header>
-      <div class="page-content" id="page-content"><div class="page-loader"><div class="loading-spinner"></div></div></div>
+      <div class="page-content" id="page-content">
+        <div class="page-loader">
+          <div style="width:100%;max-width:1200px;padding:var(--space-6);display:flex;flex-direction:column;gap:var(--space-6);">
+            <div style="height:32px;width:240px;" class="skeleton-shimmer"></div>
+            <div style="height:20px;width:360px;margin-bottom:var(--space-4);" class="skeleton-shimmer"></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:var(--space-4);">
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+            </div>
+            <div style="height:300px;width:100%;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase.js"></script>
   <script src="../js/supabase-config.js"></script>
   <script src="../js/db.js"></script>
   <script src="../js/utils.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/Flip.min.js" integrity="sha512-omCJ8S/xl+DUjxNTqvhVSptHwIEi0IDp52n63HEj8ThJgSK/8Lcpi9btnTdE8db+Y4cDKZrZ7NQZBX4PKN4i4g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="../js/motion.js"></script>
   <script>
     let session;
     let isPrincipal = false;
@@ -146,19 +165,40 @@
 
     // ── Navigation ───────────────────────────────────────────────
     function navigate(tab) {
-      activeTab = tab; selectedStudentId = null; selectedClassId = null;
-      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-      document.getElementById(`nav-${tab}`)?.classList.add('active');
-      document.getElementById('breadcrumb-current').textContent = Str.capitalize(tab);
-      closeMobileSidebar();
-      const c = document.getElementById('page-content');
-      if (tab === 'dashboard') renderDashboard(c);
-      else if (tab === 'classes') renderClasses(c);
-      else if (tab === 'students') renderStudentsView(c);
+      const navEl = document.getElementById(`nav-${tab}`);
+      if (navEl) Motion.glidePill(document.querySelector('.sidebar-nav'), navEl);
+
+      const render = () => {
+        activeTab = tab; selectedStudentId = null; selectedClassId = null;
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        if (navEl) navEl.classList.add('active');
+        document.getElementById('breadcrumb-current').textContent = Str.capitalize(tab);
+        closeMobileSidebar();
+        const c = document.getElementById('page-content');
+        if (tab === 'dashboard') renderDashboard(c);
+        else if (tab === 'classes') renderClasses(c);
+        else if (tab === 'students') renderStudentsView(c);
+      };
+
+      Motion.transition(document.getElementById('page-content'), render);
     }
 
     function statCard(label, value, icon, gradient) {
-      return `<div class="stat-card"><div class="stat-card-icon" style="background:${gradient};color:white">${icon}</div><div class="stat-card-value">${value}</div><div class="stat-card-label">${label}</div></div>`;
+      const valStr = String(value);
+      const isNumber = /^[0-9]+(\.[0-9]+)?%?$/.test(valStr.trim());
+      let valueHtml = valStr;
+      if (isNumber) {
+        const numPart = parseFloat(valStr);
+        const suffix = valStr.includes('%') ? '%' : '';
+        valueHtml = `<span class="count-up-value" data-target="${numPart}">${numPart}</span>${suffix}`;
+      } else if (!valStr.includes('<span') && !valStr.includes('<div')) {
+        valueHtml = Str.escHtml(valStr);
+      }
+      return `<div class="stat-card hover-lift">
+        <div class="stat-card-icon" style="background:${gradient};color:white">${icon}</div>
+        <div class="stat-card-value">${valueHtml}</div>
+        <div class="stat-card-label">${label}</div>
+      </div>`;
     }
 
     // ── Dashboard ────────────────────────────────────────────────
@@ -267,38 +307,42 @@
     }
 
     function openClass(courseId) {
-      selectedClassId = courseId;
-      const course = DB.Courses.getById(courseId);
-      const students = scopedStudents().filter(s => s.courseId === courseId);
-      document.getElementById('breadcrumb-current').textContent = `Class: ${course?.name || ''}`;
-      const container = document.getElementById('page-content');
-      container.innerHTML = `
-        <button class="btn btn-secondary btn-sm back-btn" onclick="navigate('classes')">${Icons.chevronLeft} Back to Classes</button>
-        <div class="page-header"><h1 class="page-title">${course?.name || 'Class'}</h1><p class="page-subtitle">${students.length} students · ${course?.semesterCount} semesters</p></div>
-        <div class="section-card"><div class="table-wrapper"><table class="data-table">
-          <thead><tr><th>Student</th><th>Roll No</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
-          <tbody>${students.map(s => rowForStudent(s)).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>'}</tbody>
-        </table></div></div>`;
+      const render = () => {
+        selectedClassId = courseId;
+        const course = DB.Courses.getById(courseId);
+        const students = scopedStudents().filter(s => s.courseId === courseId);
+        document.getElementById('breadcrumb-current').textContent = `Class: ${course?.name || ''}`;
+        const container = document.getElementById('page-content');
+        container.innerHTML = `
+          <button class="btn btn-secondary btn-sm back-btn" onclick="navigate('classes')">${Icons.chevronLeft} Back to Classes</button>
+          <div class="page-header"><h1 class="page-title">${course?.name || 'Class'}</h1><p class="page-subtitle">${students.length} students · ${course?.semesterCount} semesters</p></div>
+          <div class="section-card"><div class="table-wrapper"><table class="data-table">
+            <thead><tr><th>Student</th><th>Roll No</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>${students.map(s => rowForStudent(s)).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>'}</tbody>
+          </table></div></div>`;
+      };
+      Motion.transition(document.getElementById('page-content'), render);
     }
 
-    function currentSemAttendance(studentId) {
+    function currentSemAttendance(studentId, returnVal = false) {
       const recs = DB.SemesterRecords.getAll(studentId);
       const latest = recs[recs.length - 1];
-      return latest && latest.attendance != null ? latest.attendance + '%' : '—';
+      if (!latest || latest.attendance == null) return returnVal ? null : '—';
+      return returnVal ? latest.attendance : renderAttendanceRing(latest.attendance);
     }
 
     function rowForStudent(s) {
       const profile = DB.Profiles.get(s.id) || {};
       const course = DB.Courses.getById(s.courseId);
       return `<tr>
-        <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm')}<span class="font-semibold text-sm">${s.name}</span></div></td>
-        <td class="text-sm">${profile.rollNo || '—'}</td>
+        <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
+        <td class="text-sm">${Str.escHtml(profile.rollNo || '—')}</td>
         <td>${currentSemAttendance(s.id)}</td>
         <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
         <td><div class="flex gap-2">
-          <button class="btn btn-secondary btn-sm" onclick="StudentReport.show('${s.id}','${session.role}')">${Icons.fileText} Report</button>
-          <button class="btn btn-secondary btn-sm" onclick="editStudentUser('${s.id}')" title="Edit">${Icons.edit}</button>
-          <button class="btn btn-secondary btn-sm" onclick="transferStudent('${s.id}')" title="Transfer">${Icons.link}</button>
+          <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="StudentReport.show('${s.id}','${session.role}')">${Icons.fileText} Report</button>
+          <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="editStudentUser('${s.id}')" title="Edit">${Icons.edit}</button>
+          <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="transferStudent('${s.id}')" title="Transfer">${Icons.link}</button>
           ${parentApprovalBtn(s)}
         </div></td>
       </tr>`;
@@ -308,8 +352,8 @@
     function parentApprovalBtn(s) {
       if (!s.parentEmail) return `<span class="badge badge-gray" title="No parent email set">No parent</span>`;
       return s.parentApproved
-        ? `<button class="btn btn-secondary btn-sm" onclick="setParentApproval('${s.id}',false)" title="Revoke parent access"><span class="badge badge-green">${Icons.check} Parent OK</span></button>`
-        : `<button class="btn btn-primary btn-sm" onclick="setParentApproval('${s.id}',true)">Approve Parent</button>`;
+        ? `<button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="setParentApproval('${s.id}',false)" title="Revoke parent access"><span class="badge badge-green">${Icons.check} Parent OK</span></button>`
+        : `<button class="btn btn-primary btn-sm hover-lift press-scale" onclick="setParentApproval('${s.id}',true)">Approve Parent</button>`;
     }
     function setParentApproval(studentId, approve) {
       if (approve) DB.ParentLinks.approve(studentId, session.userId);
@@ -333,14 +377,14 @@
           <tbody>${students.map(s => {
             const course = DB.Courses.getById(s.courseId);
             return `<tr>
-              <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm')}<span class="font-semibold text-sm">${s.name}</span></div></td>
-              <td class="text-sm">${course?.name || '—'}</td>
+              <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
+              <td class="text-sm">${Str.escHtml(course?.name || '—')}</td>
               <td>${currentSemAttendance(s.id)}</td>
               <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
               <td><div class="flex gap-2">
-                <button class="btn btn-secondary btn-sm" onclick="StudentReport.show('${s.id}','${session.role}')">${Icons.fileText} Report</button>
-                <button class="btn btn-secondary btn-sm" onclick="editStudentUser('${s.id}')" title="Edit">${Icons.edit}</button>
-                <button class="btn btn-secondary btn-sm" onclick="transferStudent('${s.id}')" title="Transfer">${Icons.link}</button>
+                <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="StudentReport.show('${s.id}','${session.role}')">${Icons.fileText} Report</button>
+                <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="editStudentUser('${s.id}')" title="Edit">${Icons.edit}</button>
+                <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="transferStudent('${s.id}')" title="Transfer">${Icons.link}</button>
                 ${parentApprovalBtn(s)}
               </div></td>
             </tr>`;

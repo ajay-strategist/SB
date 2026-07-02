@@ -2,11 +2,13 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://wzqraqooarfoxkinuyic.supabase.co; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://wzqraqooarfoxkinuyic.supabase.co; connect-src 'self' https://wzqraqooarfoxkinuyic.supabase.co;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="../SB Logo.png">
   <title>Admin Panel — MentorFile</title>
   <link rel="manifest" href="../manifest.json">
   <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="../css/motion.css">
   <style>
     /* Admin-specific overrides */
     .import-preview-table { max-height: 300px; overflow-y: auto; }
@@ -69,15 +71,30 @@
 
       <!-- Page Content Container -->
       <div class="page-content" id="page-content">
-        <div class="page-loader"><div class="loading-spinner"></div></div>
+        <div class="page-loader">
+          <div style="width:100%;max-width:1200px;padding:var(--space-6);display:flex;flex-direction:column;gap:var(--space-6);">
+            <div style="height:32px;width:240px;" class="skeleton-shimmer"></div>
+            <div style="height:20px;width:360px;margin-bottom:var(--space-4);" class="skeleton-shimmer"></div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:var(--space-4);">
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+              <div style="height:100px;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+            </div>
+            <div style="height:300px;width:100%;border-radius:var(--border-radius-lg);" class="skeleton-shimmer"></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase.js"></script>
   <script src="../js/supabase-config.js"></script>
   <script src="../js/db.js"></script>
   <script src="../js/utils.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/Flip.min.js" integrity="sha512-omCJ8S/xl+DUjxNTqvhVSptHwIEi0IDp52n63HEj8ThJgSK/8Lcpi9btnTdE8db+Y4cDKZrZ7NQZBX4PKN4i4g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="../js/motion.js"></script>
   <script>
     let session;
     let activeSection = 'dashboard';
@@ -169,16 +186,22 @@
 
     // ── Navigation ───────────────────────────────────────────────
     function navigateTo(section) {
-      activeSection = section;
-      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       const navEl = document.getElementById(`nav-${section}`);
-      if (navEl) navEl.classList.add('active');
-      document.getElementById('breadcrumb-current').textContent = section.charAt(0).toUpperCase() + section.slice(1).replace(/([A-Z])/g, ' $1');
-      closeMobileSidebar();
+      if (navEl) Motion.glidePill(document.querySelector('.sidebar-nav'), navEl);
 
-      const content = document.getElementById('page-content');
-      const sections = { dashboard: renderDashboard, departments: renderDepartments, courses: renderCourses, classes: renderClassesAdmin, users: renderUsers, import: renderImport, settings: renderSettings, audit: renderAudit };
-      if (sections[section]) sections[section](content);
+      const render = () => {
+        activeSection = section;
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        if (navEl) navEl.classList.add('active');
+        document.getElementById('breadcrumb-current').textContent = section.charAt(0).toUpperCase() + section.slice(1).replace(/([A-Z])/g, ' $1');
+        closeMobileSidebar();
+
+        const content = document.getElementById('page-content');
+        const sections = { dashboard: renderDashboard, departments: renderDepartments, courses: renderCourses, classes: renderClassesAdmin, users: renderUsers, import: renderImport, settings: renderSettings, audit: renderAudit };
+        if (sections[section]) sections[section](content);
+      };
+
+      Motion.transition(document.getElementById('page-content'), render);
     }
 
     // ── Dashboard ────────────────────────────────────────────────
@@ -249,9 +272,19 @@
     }
 
     function statCard(label, value, icon, gradient, badgeClass) {
-      return `<div class="stat-card">
+      const valStr = String(value);
+      const isNumber = /^[0-9]+(\.[0-9]+)?%?$/.test(valStr.trim());
+      let valueHtml = valStr;
+      if (isNumber) {
+        const numPart = parseFloat(valStr);
+        const suffix = valStr.includes('%') ? '%' : '';
+        valueHtml = `<span class="count-up-value" data-target="${numPart}">${numPart}</span>${suffix}`;
+      } else if (!valStr.includes('<span') && !valStr.includes('<div')) {
+        valueHtml = Str.escHtml(valStr);
+      }
+      return `<div class="stat-card hover-lift">
         <div class="stat-card-icon" style="background:${gradient};color:white">${icon}</div>
-        <div class="stat-card-value">${value}</div>
+        <div class="stat-card-value">${valueHtml}</div>
         <div class="stat-card-label">${label}</div>
       </div>`;
     }
@@ -473,20 +506,20 @@
         const dept = depts.find(d => d.id === u.departmentId);
         const statusBadge = {active:'badge-green',invited:'badge-yellow',suspended:'badge-red'}[u.status] || 'badge-gray';
         const parentCell = u.role === 'student'
-          ? `<span class="text-sm">${u.parentEmail || '<span class="text-muted">— not set —</span>'}</span>`
+          ? `<span class="text-sm">${u.parentEmail ? Str.escHtml(u.parentEmail) : '<span class="text-muted">— not set —</span>'}</span>`
           : '<span class="text-muted">—</span>';
         return `<tr>
-          <td><div class="flex items-center gap-3">${renderAvatar(u.name,'sm')}<span class="font-semibold text-sm">${u.name}</span></div></td>
-          <td class="text-sm text-muted">${u.email}</td>
+          <td><div class="flex items-center gap-3">${renderAvatar(u.name,'sm')}<span class="font-semibold text-sm">${Str.escHtml(u.name)}</span></div></td>
+          <td class="text-sm text-muted">${Str.escHtml(u.email)}</td>
           <td>${renderRoleBadge(u.role)}</td>
-          <td class="text-sm">${dept?.name || '—'}</td>
+          <td class="text-sm">${Str.escHtml(dept?.name || '—')}</td>
           <td>${parentCell}</td>
-          <td><span class="badge ${statusBadge}">${u.status}</span></td>
+          <td><span class="badge ${statusBadge}">${Str.escHtml(u.status)}</span></td>
           <td>
             <div class="flex gap-2">
-              <button class="btn btn-secondary btn-sm btn-icon" onclick="showEditUserModal('${u.id}')" title="Edit">${Icons.edit}</button>
-              ${u.status === 'invited' ? `<button class="btn btn-secondary btn-sm" onclick="showInviteLink('${u.id}')" title="Show invite link">${Icons.link}</button>` : ''}
-              <button class="btn btn-danger btn-sm btn-icon" onclick="deleteUser('${u.id}')" title="Delete">${Icons.trash}</button>
+              <button class="btn btn-secondary btn-sm btn-icon hover-lift press-scale" onclick="showEditUserModal('${u.id}')" title="Edit">${Icons.edit}</button>
+              ${u.status === 'invited' ? `<button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="showInviteLink('${u.id}')" title="Show invite link">${Icons.link}</button>` : ''}
+              <button class="btn btn-danger btn-sm btn-icon hover-lift press-scale" onclick="deleteUser('${u.id}')" title="Delete">${Icons.trash}</button>
             </div>
           </td>
         </tr>`;
@@ -1026,11 +1059,16 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
             </div>
           </div>
         </div>`;
+      setTimeout(() => {
+        const activeBtn = document.querySelector('#settings-tabs .tab-btn.active');
+        if (activeBtn) Motion.glideUnderline(document.getElementById('settings-tabs'), activeBtn);
+      }, 50);
     }
 
     function switchSettingsTab(idx, btn) {
       document.querySelectorAll('#settings-tabs .tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
       document.querySelectorAll('[id^="stab-"]').forEach((t, i) => t.classList.toggle('active', i === idx));
+      Motion.glideUnderline(document.getElementById('settings-tabs'), btn);
     }
 
     function toggleEmailFields() {
