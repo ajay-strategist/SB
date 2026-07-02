@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOD / Principal — MentorFile</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .analytics-row { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-6); margin-bottom: var(--space-8); }
+    .back-btn { margin-bottom: var(--space-5); }
+    .class-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-5); }
+    .class-card { cursor: pointer; transition: transform var(--transition-fast), box-shadow var(--transition-fast); }
+    .class-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+    @media (max-width: 1024px) { .analytics-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileSidebar()"></div>
+    <aside class="sidebar" id="sidebar"><div id="sidebar-content"></div></aside>
+    <div class="main-content">
+      <header class="top-header">
+        <div class="header-left">
+          <button class="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="Toggle sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <nav class="breadcrumb" id="breadcrumb">
+            <span id="breadcrumb-root">HOD</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="9 18 15 12 9 6"/></svg>
+            <span class="current" id="breadcrumb-current">Dashboard</span>
+          </nav>
+        </div>
+        <div class="header-right">
+          <button class="header-btn" onclick="Theme.toggle()" title="Toggle theme"><span id="theme-icon-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></span></button>
+          <button class="header-btn" onclick="showNotifications()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg><span class="badge" id="notif-badge" style="display:none">0</span></button>
+        </div>
+      </header>
+      <div class="page-content" id="page-content"><div class="page-loader"><div class="loading-spinner"></div></div></div>
+    </div>
+  </div>
+
+  <script src="../js/db.js"></script>
+  <script src="../js/utils.js"></script>
+  <script>
+    let session;
+    let isPrincipal = false;
+    let activeTab = 'dashboard';
+    let selectedStudentId = null;
+    let selectedClassId = null;
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await DB.init();
+      session = requireAuth(['hod', 'principal']);
+      if (!session) return;
+      isPrincipal = session.role === 'principal';
+      document.getElementById('breadcrumb-root').textContent = roleLabel(session.role);
+      buildSidebarUI();
+      updateThemeIcon();
+      updateNotifBadge();
+      navigate('dashboard');
+    });
+
+    // ── Scope helpers (HOD = own dept, Principal = whole college) ──
+    function scopedStudents() {
+      return DB.Users.getAll().filter(u => u.role === 'student' && (isPrincipal || u.departmentId === session.departmentId));
+    }
+    function scopedFaculty() {
+      return DB.Users.getAll().filter(u => u.role === 'mentor' && (isPrincipal || u.departmentId === session.departmentId));
+    }
+    function scopedCourses() {
+      return DB.Courses.getAll().filter(c => isPrincipal || c.departmentId === session.departmentId);
+    }
+    function scopedDepartments() {
+      return DB.Departments.getAll().filter(d => isPrincipal || d.id === session.departmentId);
+    }
+
+    // ── Sidebar ─────────────────────────────────────────────────
+    function buildSidebarUI() {
+      const college = DB.Settings.getCollegeInfo();
+      document.getElementById('sidebar-content').innerHTML = `
+        <div class="sidebar-logo">
+          <img src="../SB Logo.png" alt="St. Berchmans College" style="height:42px;object-fit:contain">
+          <div class="sidebar-logo-text"><p>${roleLabel(session.role)} Panel</p></div>
+        </div>
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <div class="nav-section-label">Overview</div>
+            <button class="nav-item" id="nav-dashboard" onclick="navigate('dashboard')">${Icons.home}<span class="nav-item-text">Dashboard</span></button>
+            <button class="nav-item" id="nav-classes" onclick="navigate('classes')">${Icons.grid}<span class="nav-item-text">Classes</span></button>
+            <button class="nav-item" id="nav-students" onclick="navigate('students')">${Icons.users}<span class="nav-item-text">Students</span></button>
+          </div>
+          <div class="nav-section">
+            <div class="nav-section-label">System</div>
+            <button class="nav-item" id="nav-settings" onclick="showProfileSettings()">${Icons.settings}<span class="nav-item-text">Profile & Settings</span></button>
+          </div>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="sidebar-user" onclick="showUserMenu()">
+            ${renderAvatar(session.name, 'sm')}
+            <div class="sidebar-user-info">
+              <div class="name">${session.name}</div>
+              <div class="role">${roleLabel(session.role)}</div>
+            </div>
+          </div>
+          <button class="btn btn-danger btn-full btn-sm" style="margin-top:var(--space-3)" onclick="logout()">${Icons.logOut}<span style="margin-left:6px">Sign Out</span></button>
+        </div>`;
+    }
+
+    function toggleSidebar() {
+      const s = document.getElementById('sidebar');
+      if (window.innerWidth <= 768) { s.classList.toggle('mobile-open'); document.getElementById('mobile-overlay').classList.toggle('show'); }
+      else { s.classList.toggle('collapsed'); }
+    }
+    function closeMobileSidebar() {
+      document.getElementById('sidebar').classList.remove('mobile-open');
+      document.getElementById('mobile-overlay').classList.remove('show');
+    }
+    function updateThemeIcon() { document.getElementById('theme-icon-header').innerHTML = Theme.get() === 'dark' ? Icons.sun : Icons.moon; }
+    Theme._origToggle = Theme.toggle;
+    Theme.toggle = () => { Theme._origToggle(); updateThemeIcon(); };
+    function updateNotifBadge() {
+      const count = DB.Notifications.getUnread(session.userId).length;
+      const badge = document.getElementById('notif-badge');
+      badge.style.display = count > 0 ? 'flex' : 'none';
+      badge.textContent = count;
+    }
+    function showNotifications() {
+      const notifs = DB.Notifications.getForUser(session.userId);
+      DB.Notifications.markAllRead(session.userId);
+      updateNotifBadge();
+      Modal.create('notifs', {
+        title: 'Notifications',
+        body: notifs.length ? notifs.map(n => `
+          <div style="padding:var(--space-3) 0;border-bottom:1px solid var(--border-color)">
+            <div style="font-weight:600;font-size:var(--font-size-sm)">${n.title}</div>
+            <div style="font-size:var(--font-size-xs);color:var(--text-secondary);margin-top:2px">${n.message}</div>
+            <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${DateFmt.relativeTime(n.createdAt)}</div>
+          </div>`).join('') : '<div class="empty-state"><p>No notifications.</p></div>',
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('notifs')">Close</button>`,
+      });
+    }
+    function showProfileSettings() { showUserMenu(); }
+
+    // ── Navigation ───────────────────────────────────────────────
+    function navigate(tab) {
+      activeTab = tab; selectedStudentId = null; selectedClassId = null;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.getElementById(`nav-${tab}`)?.classList.add('active');
+      document.getElementById('breadcrumb-current').textContent = Str.capitalize(tab);
+      closeMobileSidebar();
+      const c = document.getElementById('page-content');
+      if (tab === 'dashboard') renderDashboard(c);
+      else if (tab === 'classes') renderClasses(c);
+      else if (tab === 'students') renderStudentsView(c);
+    }
+
+    function statCard(label, value, icon, gradient) {
+      return `<div class="stat-card"><div class="stat-card-icon" style="background:${gradient};color:white">${icon}</div><div class="stat-card-value">${value}</div><div class="stat-card-label">${label}</div></div>`;
+    }
+
+    // ── Dashboard ────────────────────────────────────────────────
+    function renderDashboard(container) {
+      const students = scopedStudents();
+      const faculty = scopedFaculty();
+      const courses = scopedCourses();
+      const scopeName = isPrincipal ? 'College' : (DB.Departments.getById(session.departmentId)?.name || 'Department');
+
+      container.innerHTML = `
+        <div class="page-header">
+          <h1 class="page-title">${scopeName} Overview</h1>
+          <p class="page-subtitle">Students, faculty, classes and mentor coverage.</p>
+        </div>
+        <div class="stats-grid">
+          ${statCard('No. of Students', students.length, Icons.users, 'linear-gradient(135deg, #4F46E5, #6366F1)')}
+          ${statCard('No. of Faculties', faculty.length, Icons.user, 'linear-gradient(135deg, #0891B2, #06B6D4)')}
+          ${statCard('No. of Classes', courses.length, Icons.grid, 'linear-gradient(135deg, #059669, #10B981)')}
+          ${statCard('Requires Attention', students.filter(s => DB.Analytics.getStudentStatus(s.id) !== 'green').length, Icons.info, 'linear-gradient(135deg, #F59E0B, #FBBF24)')}
+        </div>
+
+        <div class="analytics-row">
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">${Icons.grid} No. of Students by Class</div></div>
+            <div class="section-card-body" style="padding:0">
+              ${courses.map(c => {
+                const cs = students.filter(s => s.courseId === c.id);
+                const g = genderCounts(cs);
+                return `<div style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border-color);cursor:pointer" onclick="openClass('${c.id}')">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                    <span class="font-semibold text-sm">${c.name}</span>
+                    <span class="text-xs text-muted">${cs.length} students</span>
+                  </div>
+                  <div class="text-xs text-muted">Male ${g.male} · Female ${g.female} · Other ${g.other}</div>
+                </div>`;
+              }).join('') || '<div style="padding:var(--space-5);text-align:center;color:var(--text-tertiary)">No classes yet.</div>'}
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">${Icons.user} Mentor Coverage (Students by Faculty)</div></div>
+            <div class="section-card-body" style="padding:0">
+              ${faculty.map(m => `
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border-color)">
+                  <div style="flex:1"><div class="font-semibold text-sm">${m.name}</div><div class="text-xs text-muted">${m.email}</div></div>
+                  <span class="badge badge-blue">${DB.Assignments.getMentees(m.id).length} students</span>
+                </div>`).join('') || '<div style="padding:var(--space-5);text-align:center;color:var(--text-tertiary)">No faculty yet.</div>'}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function genderCounts(students) {
+      const g = { male: 0, female: 0, other: 0 };
+      students.forEach(s => {
+        const gv = (DB.Profiles.get(s.id)?.gender || '').toLowerCase();
+        if (gv === 'male' || gv === 'm') g.male++; else if (gv === 'female' || gv === 'f') g.female++; else g.other++;
+      });
+      return g;
+    }
+
+    // ── Classes tab (cards) ──────────────────────────────────────
+    function classIncharge(course) {
+      // in-charge = faculty in the class's department with the most mentees in that class
+      const fac = scopedFaculty().filter(m => m.departmentId === course.departmentId);
+      let best = null, bestN = -1;
+      fac.forEach(m => {
+        const n = DB.Assignments.getMentees(m.id).map(id => DB.Users.getById(id)).filter(s => s && s.courseId === course.id).length;
+        if (n > bestN) { bestN = n; best = m; }
+      });
+      return bestN > 0 ? best : null;
+    }
+
+    function renderClasses(container) {
+      const courses = scopedCourses();
+      const students = scopedStudents();
+      container.innerHTML = `
+        <div class="page-header"><h1 class="page-title">Classes</h1><p class="page-subtitle">${courses.length} class(es).</p></div>
+        <div class="class-grid">
+          ${courses.map(c => {
+            const cs = students.filter(s => s.courseId === c.id);
+            const g = genderCounts(cs);
+            const inc = classIncharge(c);
+            const dept = DB.Departments.getById(c.departmentId);
+            return `<div class="section-card class-card" onclick="openClass('${c.id}')">
+              <div class="section-card-body">
+                <div style="display:flex;justify-content:space-between;align-items:start">
+                  <div>
+                    <div class="font-semibold">${c.name}</div>
+                    <div class="text-xs text-muted">${dept?.name || ''} · ${c.semesterCount} sem</div>
+                  </div>
+                  <button class="btn btn-secondary btn-sm btn-icon" onclick="event.stopPropagation();editClass('${c.id}')" title="Edit class">${Icons.edit}</button>
+                </div>
+                <hr class="divider">
+                <div class="text-sm"><strong>In-charge:</strong> ${inc ? inc.name : '<span class="text-muted">— not set —</span>'}</div>
+                <div class="text-sm mt-2"><strong>Students:</strong> ${cs.length}</div>
+                <div class="flex gap-2 mt-3">
+                  <span class="badge badge-blue">M ${g.male}</span>
+                  <span class="badge badge-purple">F ${g.female}</span>
+                  <span class="badge badge-gray">Other ${g.other}</span>
+                </div>
+              </div>
+            </div>`;
+          }).join('') || '<div class="empty-state"><p>No classes configured.</p></div>'}
+        </div>`;
+    }
+
+    function openClass(courseId) {
+      selectedClassId = courseId;
+      const course = DB.Courses.getById(courseId);
+      const students = scopedStudents().filter(s => s.courseId === courseId);
+      document.getElementById('breadcrumb-current').textContent = `Class: ${course?.name || ''}`;
+      const container = document.getElementById('page-content');
+      container.innerHTML = `
+        <button class="btn btn-secondary btn-sm back-btn" onclick="navigate('classes')">${Icons.chevronLeft} Back to Classes</button>
+        <div class="page-header"><h1 class="page-title">${course?.name || 'Class'}</h1><p class="page-subtitle">${students.length} students · ${course?.semesterCount} semesters</p></div>
+        <div class="section-card"><div class="table-wrapper"><table class="data-table">
+          <thead><tr><th>Student</th><th>Roll No</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${students.map(s => rowForStudent(s)).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>'}</tbody>
+        </table></div></div>`;
+    }
+
+    function currentSemAttendance(studentId) {
+      const recs = DB.SemesterRecords.getAll(studentId);
+      const latest = recs[recs.length - 1];
+      return latest && latest.attendance != null ? latest.attendance + '%' : '—';
+    }
+
+    function rowForStudent(s) {
+      const profile = DB.Profiles.get(s.id) || {};
+      const course = DB.Courses.getById(s.courseId);
+      return `<tr>
+        <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm')}<span class="font-semibold text-sm">${s.name}</span></div></td>
+        <td class="text-sm">${profile.rollNo || '—'}</td>
+        <td>${currentSemAttendance(s.id)}</td>
+        <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
+        <td><div class="flex gap-2">
+          <button class="btn btn-secondary btn-sm" onclick="StudentReport.show('${s.id}','${session.role}')">${Icons.fileText} Report</button>
+          <button class="btn btn-secondary btn-sm" onclick="editStudentUser('${s.id}')" title="Edit">${Icons.edit}</button>
+          <button class="btn btn-secondary btn-sm" onclick="transferStudent('${s.id}')" title="Transfer">${Icons.link}</button>
+          ${parentApprovalBtn(s)}
+        </div></td>
+      </tr>`;
+    }
+
+    // Visible parent-approval control (HOD/Principal)
+    function parentApprovalBtn(s) {
+      if (!s.parentEmail) return `<span class="badge badge-gray" title="No parent email set">No parent</span>`;
+      return s.parentApproved
+        ? `<button class="btn btn-secondary btn-sm" onclick="setParentApproval('${s.id}',false)" title="Revoke parent access"><span class="badge badge-green">${Icons.check} Parent OK</span></button>`
+        : `<button class="btn btn-primary btn-sm" onclick="setParentApproval('${s.id}',true)">Approve Parent</button>`;
+    }
+    function setParentApproval(studentId, approve) {
+      if (approve) DB.ParentLinks.approve(studentId, session.userId);
+      else DB.ParentLinks.revoke(studentId, session.userId);
+      Toast.success(approve ? 'Parent Approved' : 'Access Revoked', approve ? 'Parent can now view the report.' : 'Parent access revoked.');
+      navigate(activeTab);
+    }
+
+    // ── Students View (table) ────────────────────────────────────
+    function renderStudentsView(container) {
+      const students = scopedStudents().sort((a, b) => a.name.localeCompare(b.name));
+      container.innerHTML = `
+        <div class="page-header">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:var(--space-3)">
+            <div><h1 class="page-title">Students</h1><p class="page-subtitle">${students.length} students${isPrincipal ? ' (college-wide)' : ''}.</p></div>
+            <button class="btn btn-secondary" onclick="exportAccreditationReport()">${Icons.download} Export CSV</button>
+          </div>
+        </div>
+        <div class="section-card"><div class="table-wrapper"><table class="data-table">
+          <thead><tr><th>Student</th><th>Class</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${students.map(s => {
+            const course = DB.Courses.getById(s.courseId);
+            return `<tr>
+              <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm')}<span class="font-semibold text-sm">${s.name}</span></div></td>
+              <td class="text-sm">${course?.name || '—'}</td>
+              <td>${currentSemAttendance(s.id)}</td>
+              <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
+              <td><div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm" onclick="StudentReport.show('${s.id}','${session.role}')">${Icons.fileText} Report</button>
+                <button class="btn btn-secondary btn-sm" onclick="editStudentUser('${s.id}')" title="Edit">${Icons.edit}</button>
+                <button class="btn btn-secondary btn-sm" onclick="transferStudent('${s.id}')" title="Transfer">${Icons.link}</button>
+                ${parentApprovalBtn(s)}
+              </div></td>
+            </tr>`;
+          }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students.</td></tr>'}</tbody>
+        </table></div></div>`;
+    }
+
+    // ── Edit student user (HOD can update Teachers/Students/Parents) ──
+    function editStudentUser(studentId) {
+      const s = DB.Users.getById(studentId);
+      const p = DB.Profiles.get(studentId) || {};
+      Modal.create('edit-stu', {
+        title: `Edit — ${s.name}`, size: 'sm',
+        body: `
+          <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="es-name" value="${s.name}"></div>
+          <div class="form-group"><label class="form-label">Gender</label>
+            <select class="form-select" id="es-gender">
+              ${['','Male','Female','Other'].map(g => `<option value="${g}" ${(p.gender||'')===g?'selected':''}>${g||'— select —'}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Parent Email</label><input class="form-input" id="es-parent" value="${s.parentEmail||''}" placeholder="parent@email.com">
+            <div class="form-hint">Editable by Teacher, HOD, Principal and Admin.</div></div>
+          <div class="setting-row" style="display:flex;justify-content:space-between;align-items:center;padding:var(--space-2) 0">
+            <span class="text-sm">Parent access approved</span>
+            <input type="checkbox" id="es-approved" ${s.parentApproved?'checked':''}>
+          </div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-stu')">Cancel</button>
+                 <button class="btn btn-primary" onclick="saveStudentUser('${studentId}')">Save</button>`,
+      });
+    }
+    function saveStudentUser(studentId) {
+      const name = document.getElementById('es-name').value.trim();
+      const gender = document.getElementById('es-gender').value;
+      const parentEmail = document.getElementById('es-parent').value.trim().toLowerCase();
+      const approved = document.getElementById('es-approved').checked;
+      DB.Users.update(studentId, { name, parentEmail: parentEmail || null, parentApproved: approved }, session.userId);
+      DB.Profiles.save(studentId, { ...(DB.Profiles.get(studentId)||{}), gender }, session.userId);
+      if (parentEmail) DB.ParentLinks.setParentEmail(studentId, parentEmail, session.userId);
+      Toast.success('Saved', 'Student updated.');
+      Modal.close('edit-stu');
+      navigate(activeTab);
+    }
+
+    // ── Transfer student to another Teacher / Class ──────────────
+    function transferStudent(studentId) {
+      const s = DB.Users.getById(studentId);
+      const faculty = DB.Users.getAll().filter(u => u.role === 'mentor');
+      const classes = DB.Classes.getAll();
+      const currentMentor = DB.Assignments.getMentor(studentId);
+      Modal.create('transfer', {
+        title: `Transfer — ${s.name}`, size: 'sm',
+        body: `
+          <div class="form-group"><label class="form-label">Assign to Teacher (Mentor)</label>
+            <select class="form-select" id="tr-mentor">
+              <option value="">— Keep current —</option>
+              ${faculty.map(m => `<option value="${m.id}" ${currentMentor===m.id?'selected':''}>${m.name}${m.departmentId?` · ${DB.Departments.getById(m.departmentId)?.name||''}`:''}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">Move to Class</label>
+            <select class="form-select" id="tr-class">
+              <option value="">— Keep current —</option>
+              ${classes.map(c => `<option value="${c.id}" ${s.classId===c.id?'selected':''}>${c.name}</option>`).join('')}
+            </select>
+          </div>
+          <div class="alert alert-info">${Icons.info} Transferring updates the student's mentor and/or class for the next academic period.</div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('transfer')">Cancel</button>
+                 <button class="btn btn-primary" onclick="doTransfer('${studentId}')">Transfer</button>`,
+      });
+    }
+    function doTransfer(studentId) {
+      const mentorId = document.getElementById('tr-mentor').value;
+      const classId = document.getElementById('tr-class').value;
+      if (mentorId) DB.Assignments.assign(mentorId, studentId, session.userId);
+      if (classId) {
+        const cls = DB.Classes.getById(classId);
+        DB.Users.update(studentId, { classId, courseId: cls?.courseId, departmentId: cls?.departmentId }, session.userId);
+      }
+      Toast.success('Transferred', 'Student reassigned.');
+      Modal.close('transfer');
+      navigate(activeTab);
+    }
+
+    // ── Edit class (course) ──────────────────────────────────────
+    function editClass(courseId) {
+      const c = DB.Courses.getById(courseId);
+      const depts = DB.Departments.getAll();
+      Modal.create('edit-class', {
+        title: `Edit Class — ${c.name}`, size: 'sm',
+        body: `
+          <div class="form-group"><label class="form-label required">Class / Course Name</label><input class="form-input" id="ec-name" value="${c.name}"></div>
+          <div class="form-group"><label class="form-label">Department</label>
+            <select class="form-select" id="ec-dept">${depts.map(d => `<option value="${d.id}" ${c.departmentId===d.id?'selected':''}>${d.name}</option>`).join('')}</select>
+          </div>
+          <div class="form-group"><label class="form-label required">Number of Semesters</label><input type="number" class="form-input" id="ec-sems" value="${c.semesterCount}" min="1" max="20"></div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-class')">Cancel</button>
+                 <button class="btn btn-primary" onclick="saveClass('${courseId}')">Save</button>`,
+      });
+    }
+    function saveClass(courseId) {
+      const name = document.getElementById('ec-name').value.trim();
+      const departmentId = document.getElementById('ec-dept').value;
+      const semesterCount = parseInt(document.getElementById('ec-sems').value);
+      if (!name || !semesterCount) { Toast.error('Missing fields'); return; }
+      DB.Courses.update(courseId, { name, departmentId, semesterCount }, session.userId);
+      Toast.success('Saved', 'Class updated.');
+      Modal.close('edit-class');
+      navigate('classes');
+    }
+
+    // ── NAAC / accreditation CSV ─────────────────────────────────
+    function exportAccreditationReport() {
+      const students = scopedStudents();
+      const rows = students.map(s => {
+        const profile = DB.Profiles.get(s.id) || {};
+        const recs = DB.SemesterRecords.getAll(s.id);
+        const latest = recs[recs.length - 1] || {};
+        const ov = StudentReport.overview(s.id);
+        return {
+          'Student Name': s.name, 'Email': s.email, 'Roll No': profile.rollNo || '',
+          'Class': DB.Courses.getById(s.courseId)?.name || '',
+          'Latest SGPA': latest.gradePoint || 'No Data', 'Grade': latest.grade || 'No Data',
+          'Latest Attendance (%)': latest.attendance || 'No Data',
+          'Semesters Passed': ov.passed, 'Semesters Failed': ov.failed,
+          'Status': DB.Analytics.getStudentStatus(s.id),
+        };
+      });
+      exportCSV(rows, `Report_${isPrincipal ? 'College' : 'Dept'}_${DateFmt.today()}.csv`);
+      Toast.success('Report Exported', 'CSV summary generated.');
+    }
+  </script>
+</body>
+</html>

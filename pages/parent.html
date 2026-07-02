@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parent Portal — MentorFile</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .parent-container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: var(--space-6) var(--space-4);
+    }
+    .parent-header {
+      background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+      color: white;
+      padding: var(--space-6);
+      border-radius: var(--border-radius-lg);
+      margin-bottom: var(--space-6);
+    }
+  </style>
+</head>
+<body>
+  <div class="parent-container">
+    <div class="parent-header">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h1 style="font-size:var(--font-size-xl);font-weight:800">Parent Portal</h1>
+          <p style="font-size:var(--font-size-xs);opacity:0.9">Student Progress & PTA Logs</p>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-secondary btn-sm" onclick="showChangePassword()">Change Password</button>
+          <button class="btn btn-danger btn-sm" onclick="logout()">${Icons.logOut} Sign Out</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Student identity card -->
+    <div class="section-card mb-6">
+      <div class="section-card-header">
+        <div class="section-card-title">${Icons.user} Ward Information</div>
+      </div>
+      <div class="section-card-body">
+        <div id="ward-info">
+          <div class="page-loader"><div class="loading-spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Academic Records -->
+    <div class="section-card mb-6">
+      <div class="section-card-header">
+        <div class="section-card-title">${Icons.chart} Academic Grades & Attendance Progress</div>
+      </div>
+      <div class="section-card-body" style="padding:0">
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead><tr><th>Semester</th><th>Grade Point (SGPA)</th><th>Grade</th><th>Attendance %</th><th>Mentor Review Remarks</th></tr></thead>
+            <tbody id="grades-tbody">
+              <tr><td colspan="5" style="text-align:center;color:var(--text-tertiary)">Loading academic data...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PTA meetings -->
+    <div class="section-card">
+      <div class="section-card-header">
+        <div class="section-card-title">${Icons.users} Parent-Teacher Meeting Log</div>
+      </div>
+      <div class="section-card-body" style="padding:0">
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead><tr><th>Sem</th><th>Date</th><th>Meeting Discussion Summary</th><th>Signature / Acknowledgment</th></tr></thead>
+            <tbody id="pta-tbody">
+              <tr><td colspan="4" style="text-align:center;color:var(--text-tertiary)">Loading meeting logs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/db.js"></script>
+  <script src="../js/utils.js"></script>
+  <script>
+    let session;
+    let ward = null;
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await DB.init();
+      session = requireAuth(['parent']);
+      if (!session) return;
+
+      loadWardDetails();
+    });
+
+    function loadWardDetails() {
+      // Find linked student
+      ward = DB.Users.getById(session.linkedStudentId);
+      if (!ward) {
+        // Fallback: search by parentEmail
+        ward = DB.Users.getAll().find(u => u.parentEmail === session.email && u.role === 'student');
+      }
+
+      if (!ward) {
+        document.getElementById('ward-info').innerHTML = `<div class="alert alert-error">No linked student account was found. Please contact administration.</div>`;
+        return;
+      }
+
+      // Access gate: parent may only view once approved by staff
+      if (!ward.parentApproved) {
+        document.getElementById('ward-info').innerHTML = `<div class="alert alert-warning">${Icons.alert}<div>Your access to <strong>${ward.name}</strong>'s records is <strong>pending approval</strong> by the school (Teacher / HOD / Principal / Admin). You'll be able to view the report once approved.</div></div>`;
+        document.getElementById('grades-tbody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">Locked until access is approved.</td></tr>`;
+        document.getElementById('pta-tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">Locked until access is approved.</td></tr>`;
+        return;
+      }
+
+      // Ward info Card
+      const profile = DB.Profiles.get(ward.id) || {};
+      const course = DB.Courses.getById(ward.courseId);
+      const mentorId = DB.Assignments.getMentor(ward.id);
+      const mentor = mentorId ? DB.Users.getById(mentorId) : null;
+
+      document.getElementById('ward-info').innerHTML = `
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Name of Student</label><div class="form-input" style="background:var(--bg-surface-2)">${ward.name}</div></div>
+          <div class="form-group"><label class="form-label">Roll Number</label><div class="form-input" style="background:var(--bg-surface-2)">${profile.rollNo || '—'}</div></div>
+          <div class="form-group"><label class="form-label">Course / Program</label><div class="form-input" style="background:var(--bg-surface-2)">${course?.name || '—'}</div></div>
+        </div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Assigned Mentor</label><div class="form-input" style="background:var(--bg-surface-2)">${mentor ? mentor.name + ' (' + mentor.email + ')' : 'Not Assigned'}</div></div>
+          <div class="form-group"><label class="form-label">Class Year</label><div class="form-input" style="background:var(--bg-surface-2)">${profile.className || '—'}</div></div>
+        </div>
+        <button class="btn btn-primary btn-sm mt-4" onclick="StudentReport.show('${ward.id}','parent')">${Icons.fileText} View Full Report</button>`;
+
+      // Grades table
+      const recs = DB.SemesterRecords.getAll(ward.id);
+      const semsCount = course ? course.semesterCount : 6;
+      document.getElementById('grades-tbody').innerHTML = Array.from({ length: semsCount }, (_, i) => {
+        const r = recs.find(rc => rc.semester === i + 1);
+        return `
+          <tr>
+            <td>Semester ${i + 1}</td>
+            <td>${r?.gradePoint || '—'}</td>
+            <td>${r?.grade || '—'}</td>
+            <td>${r?.attendance ? r.attendance + '%' : '—'}</td>
+            <td style="white-space:normal">${r?.remarks || 'No remarks logged.'}</td>
+          </tr>`;
+      }).join('');
+
+      // PTA table
+      renderPtaLogs();
+    }
+
+    function renderPtaLogs() {
+      const ptaList = DB.PTAMeetings.getAll(ward.id);
+      document.getElementById('pta-tbody').innerHTML = ptaList.map(m => `
+        <tr>
+          <td>Sem ${m.semester}</td>
+          <td>${DateFmt.format(m.date)}</td>
+          <td style="white-space:normal;max-width:300px">${m.notes}</td>
+          <td>
+            ${m.parentAcknowledged 
+              ? `<span class="badge badge-green">${Icons.check} Digitally Acknowledged</span>` 
+              : `<button class="btn btn-primary btn-sm" onclick="showAcknowledgeCanvas('${m.id}')">Acknowledge / Sign</button>`}
+          </td>
+        </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No PTA meetings registered.</td></tr>';
+    }
+
+    // ── Parent digital signature ──────────────────────────────────
+    let parentSigCanvas = null;
+
+    function showAcknowledgeCanvas(meetingId) {
+      Modal.create('parent-sign', {
+        title: 'PTA Digital Signature',
+        size: 'sm',
+        body: `
+          <p class="text-sm text-muted mb-4">Draw your signature in the box below to digitally sign and acknowledge this PTA meeting.</p>
+          <div class="signature-canvas-wrap mb-4" id="parent-sig-wrap">
+            <canvas class="signature-canvas"></canvas>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="parentSigCanvas.clear()">Clear signature</button>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('parent-sign')">Cancel</button>
+                 <button class="btn btn-primary" onclick="submitParentSignature('${meetingId}')">Submit Acknowledgment</button>`,
+      });
+
+      parentSigCanvas = new SignatureCanvas('parent-sig-wrap');
+    }
+
+    function submitParentSignature(meetingId) {
+      const dataUrl = parentSigCanvas.toDataURL();
+      if (!dataUrl) { Toast.error('Please sign first'); return; }
+
+      DB.PTAMeetings.acknowledge(meetingId, session.userId);
+      Toast.success('Meeting Acknowledged', 'Acknowledge status updated.');
+      Modal.close('parent-sign');
+      renderPtaLogs();
+    }
+  </script>
+</body>
+</html>

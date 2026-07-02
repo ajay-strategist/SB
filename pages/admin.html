@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel — MentorFile</title>
+  <link rel="manifest" href="../manifest.json">
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    /* Admin-specific overrides */
+    .import-preview-table { max-height: 300px; overflow-y: auto; }
+    .setting-row { display: flex; align-items: center; justify-content: space-between; padding: var(--space-4) 0; border-bottom: 1px solid var(--border-color); }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label { font-weight: 600; font-size: var(--font-size-sm); color: var(--text-primary); }
+    .setting-desc { font-size: var(--font-size-xs); color: var(--text-secondary); margin-top: 2px; }
+    .toggle-switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--bg-surface-3); border-radius: 24px; cursor: pointer; transition: background var(--transition-base); }
+    .toggle-slider::before { content:''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: transform var(--transition-base); box-shadow: var(--shadow-xs); }
+    .toggle-switch input:checked + .toggle-slider { background: var(--brand-primary); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+    .tag-input-wrap { display: flex; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border-color); border-radius: var(--border-radius-md); min-height: 44px; cursor: text; }
+    .tag-item { background: var(--bg-surface-2); border: 1px solid var(--border-color); border-radius: var(--border-radius-full); padding: 2px var(--space-3); font-size: var(--font-size-xs); display: flex; align-items: center; gap: var(--space-1); }
+    .tag-remove { cursor: pointer; color: var(--text-tertiary); background: none; border: none; padding: 0; line-height: 1; font-size: 14px; }
+    .tag-add-input { border: none; outline: none; background: transparent; font-size: var(--font-size-xs); color: var(--text-primary); font-family: inherit; flex: 1; min-width: 80px; }
+    .audit-item { padding: var(--space-3) 0; border-bottom: 1px solid var(--border-color); font-size: var(--font-size-xs); }
+    .audit-item:last-child { border-bottom: none; }
+    .audit-action { font-weight: 600; color: var(--text-primary); }
+    .audit-meta { color: var(--text-tertiary); margin-top: 2px; }
+    .invite-token-box { background: rgba(79,70,229,0.06); border: 1px solid rgba(79,70,229,0.2); border-radius: var(--border-radius-md); padding: var(--space-3) var(--space-4); font-size: var(--font-size-xs); word-break: break-all; margin-top: var(--space-3); }
+    .invite-link-url { color: var(--brand-primary); }
+    .sem-count-badge { display: inline-flex; align-items: center; justify-content: center; background: var(--brand-primary); color: white; border-radius: var(--border-radius-full); width: 28px; height: 28px; font-size: var(--font-size-xs); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Mobile overlay -->
+    <div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div id="sidebar-content"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <header class="top-header">
+        <div class="header-left">
+          <button class="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="Toggle sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <nav class="breadcrumb" id="breadcrumb">
+            <span>Admin</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="9 18 15 12 9 6"/></svg>
+            <span class="current" id="breadcrumb-current">Dashboard</span>
+          </nav>
+        </div>
+        <div class="header-right">
+          <button class="header-btn" onclick="Theme.toggle()" title="Toggle theme" aria-label="Toggle dark mode">
+            <span id="theme-icon-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></span>
+          </button>
+          <button class="header-btn" onclick="showNotifications()" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="badge" id="notif-badge" style="display:none">0</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Content Container -->
+      <div class="page-content" id="page-content">
+        <div class="page-loader"><div class="loading-spinner"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/db.js"></script>
+  <script src="../js/utils.js"></script>
+  <script>
+    let session;
+    let activeSection = 'dashboard';
+
+    // ── Init ────────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', async () => {
+      await DB.init();
+      session = requireAuth(['admin']);
+      if (!session) return;
+
+      buildAdminSidebar();
+      updateThemeIcon();
+      updateNotifBadge();
+      navigateTo('dashboard');
+    });
+
+    // ── Sidebar ─────────────────────────────────────────────────
+    function buildAdminSidebar() {
+      const college = DB.Settings.getCollegeInfo();
+      const unread = DB.Notifications.getUnread(session.userId).length;
+      document.getElementById('sidebar-content').innerHTML = `
+        <div class="sidebar-logo">
+          <img src="../SB Logo.png" alt="St. Berchmans College" style="height:42px;object-fit:contain">
+          <div class="sidebar-logo-text"><p>Admin Panel</p></div>
+        </div>
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <div class="nav-section-label">Overview</div>
+            <button class="nav-item" id="nav-dashboard" onclick="navigateTo('dashboard')">${Icons.home}<span class="nav-item-text">Dashboard</span></button>
+          </div>
+          <div class="nav-section">
+            <div class="nav-section-label">Configuration</div>
+            <button class="nav-item" id="nav-departments" onclick="navigateTo('departments')">${Icons.department}<span class="nav-item-text">Departments</span></button>
+            <button class="nav-item" id="nav-courses" onclick="navigateTo('courses')">${Icons.book}<span class="nav-item-text">Courses</span></button>
+            <button class="nav-item" id="nav-classes" onclick="navigateTo('classes')">${Icons.grid}<span class="nav-item-text">Classes</span></button>
+          </div>
+          <div class="nav-section">
+            <div class="nav-section-label">Users</div>
+            <button class="nav-item" id="nav-users" onclick="navigateTo('users')">${Icons.users}<span class="nav-item-text">All Users</span></button>
+            <button class="nav-item" id="nav-import" onclick="navigateTo('import')">${Icons.upload}<span class="nav-item-text">Bulk Import</span></button>
+          </div>
+          <div class="nav-section">
+            <div class="nav-section-label">System</div>
+            <button class="nav-item" id="nav-settings" onclick="navigateTo('settings')">${Icons.settings}<span class="nav-item-text">Profile & Settings</span></button>
+            <button class="nav-item" id="nav-audit" onclick="navigateTo('audit')">${Icons.fileText}<span class="nav-item-text">Audit Log</span></button>
+          </div>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="sidebar-user" onclick="showUserMenu()">
+            ${renderAvatar(session.name, 'sm')}
+            <div class="sidebar-user-info">
+              <div class="name">${session.name}</div>
+              <div class="role">${roleLabel(session.role)}</div>
+            </div>
+          </div>
+          <button class="btn btn-danger btn-full btn-sm" style="margin-top:var(--space-3)" onclick="logout()">${Icons.logOut}<span style="margin-left:6px">Sign Out</span></button>
+        </div>`;
+    }
+
+    function toggleSidebar() {
+      const s = document.getElementById('sidebar');
+      if (window.innerWidth <= 768) {
+        s.classList.toggle('mobile-open');
+        document.getElementById('mobile-overlay').classList.toggle('show');
+      } else {
+        s.classList.toggle('collapsed');
+      }
+    }
+
+    function closeMobileSidebar() {
+      document.getElementById('sidebar').classList.remove('mobile-open');
+      document.getElementById('mobile-overlay').classList.remove('show');
+    }
+
+    function updateThemeIcon() {
+      const isDark = Theme.get() === 'dark';
+      document.getElementById('theme-icon-header').innerHTML = isDark ? Icons.sun : Icons.moon;
+    }
+
+    Theme._origToggle = Theme.toggle;
+    Theme.toggle = () => { Theme._origToggle(); updateThemeIcon(); };
+
+    function updateNotifBadge() {
+      const count = DB.Notifications.getUnread(session.userId).length;
+      const badge = document.getElementById('notif-badge');
+      badge.style.display = count > 0 ? 'flex' : 'none';
+      badge.textContent = count;
+    }
+
+    // ── Navigation ───────────────────────────────────────────────
+    function navigateTo(section) {
+      activeSection = section;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      const navEl = document.getElementById(`nav-${section}`);
+      if (navEl) navEl.classList.add('active');
+      document.getElementById('breadcrumb-current').textContent = section.charAt(0).toUpperCase() + section.slice(1).replace(/([A-Z])/g, ' $1');
+      closeMobileSidebar();
+
+      const content = document.getElementById('page-content');
+      const sections = { dashboard: renderDashboard, departments: renderDepartments, courses: renderCourses, classes: renderClassesAdmin, users: renderUsers, import: renderImport, settings: renderSettings, audit: renderAudit };
+      if (sections[section]) sections[section](content);
+    }
+
+    // ── Dashboard ────────────────────────────────────────────────
+    function renderDashboard(container) {
+      const allUsers = DB.Users.getAll();
+      const students = allUsers.filter(u => u.role === 'student');
+      const mentors = allUsers.filter(u => u.role === 'mentor');
+      const depts = DB.Departments.getAll();
+      const courses = DB.Courses.getAll();
+      const parents = allUsers.filter(u => u.role === 'parent');
+
+      container.innerHTML = `
+        <div class="page-header">
+          <h1 class="page-title">Admin Dashboard</h1>
+          <p class="page-subtitle">System overview and quick actions.</p>
+        </div>
+
+        <div class="stats-grid">
+          ${statCard('Total Students', students.length, Icons.users, 'linear-gradient(135deg, #4F46E5, #6366F1)', 'badge-purple')}
+          ${statCard('Faculty / Teachers', mentors.length, Icons.user, 'linear-gradient(135deg, #0891B2, #06B6D4)', 'badge-cyan')}
+          ${statCard('Departments', depts.length, Icons.department, 'linear-gradient(135deg, #059669, #10B981)', 'badge-green')}
+          ${statCard('Courses', courses.length, Icons.book, 'linear-gradient(135deg, #7C3AED, #A855F7)', 'badge-purple')}
+        </div>
+
+        <div class="grid" style="grid-template-columns:1fr;gap:var(--space-6)">
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">${Icons.department} Department Overview</div>
+            </div>
+            <div class="section-card-body" style="padding:0">
+              ${depts.map(d => {
+                const summary = DB.Analytics.getDepartmentSummary(d.id);
+                return `<div style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border-color)">
+                  <div style="display:flex;justify-content:space-between;margin-bottom:var(--space-2)">
+                    <span class="font-semibold text-sm">${d.name}</span>
+                    <span class="text-xs text-muted">${summary.total} students</span>
+                  </div>
+                  <div style="display:flex;gap:var(--space-2)">
+                    <span class="badge badge-green"><span class="status-dot"></span>${summary.green}</span>
+                    <span class="badge badge-yellow"><span class="status-dot"></span>${summary.yellow}</span>
+                    <span class="badge badge-red"><span class="status-dot"></span>${summary.red}</span>
+                  </div>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+
+        <div class="section-card mt-6">
+          <div class="section-card-header">
+            <div class="section-card-title">${Icons.grid} Quick Actions</div>
+          </div>
+          <div class="section-card-body">
+            <div class="grid-2">
+              ${[
+                ['Add Department', 'department', 'navigateTo(\'departments\')'],
+                ['Add Course', 'book', 'navigateTo(\'courses\')'],
+                ['Add User', 'user', 'showAddUserModal()'],
+                ['Bulk Import CSV', 'upload', 'navigateTo(\'import\')'],
+                ['System Settings', 'settings', 'navigateTo(\'settings\')'],
+              ].map(([label, icon, onclick]) => `
+                <button class="btn btn-secondary" style="justify-content:flex-start;padding:var(--space-4)" onclick="${onclick}">
+                  ${Icons[icon] || Icons.grid} ${label}
+                </button>`).join('')}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function statCard(label, value, icon, gradient, badgeClass) {
+      return `<div class="stat-card">
+        <div class="stat-card-icon" style="background:${gradient};color:white">${icon}</div>
+        <div class="stat-card-value">${value}</div>
+        <div class="stat-card-label">${label}</div>
+      </div>`;
+    }
+
+    // ── Departments ──────────────────────────────────────────────
+    function renderDepartments(container) {
+      const depts = DB.Departments.getAll();
+      container.innerHTML = `
+        <div class="page-header">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div><h1 class="page-title">Departments</h1><p class="page-subtitle">${depts.length} department(s) configured.</p></div>
+            <button class="btn btn-primary" onclick="showDeptModal()">${Icons.plus} Add Department</button>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead><tr><th>Department Name</th><th>Code</th><th>HOD</th><th>Faculties</th><th>Students</th><th>Courses</th><th>Actions</th></tr></thead>
+              <tbody>${depts.length ? depts.map(d => {
+                const students = DB.Users.getAll().filter(u => u.role === 'student' && u.departmentId === d.id);
+                const courses = DB.Courses.getByDepartment(d.id);
+                const hod = DB.Users.getAll().find(u => u.role === 'hod' && u.departmentId === d.id);
+                const faculties = DB.Users.getAll().filter(u => u.role === 'mentor' && u.departmentId === d.id);
+                return `<tr>
+                  <td><strong>${d.name}</strong></td>
+                  <td><span class="badge badge-gray">${d.code || '—'}</span></td>
+                  <td class="text-sm">${hod ? hod.name : '<span class="text-muted">— not set —</span>'}</td>
+                  <td>${faculties.length}</td>
+                  <td>${students.length}</td>
+                  <td>${courses.length}</td>
+                  <td>
+                    <div class="flex gap-2">
+                      <button class="btn btn-secondary btn-sm btn-icon" onclick="showDeptModal('${d.id}')" title="Edit">${Icons.edit}</button>
+                      <button class="btn btn-danger btn-sm btn-icon" onclick="deleteDept('${d.id}')" title="Delete">${Icons.trash}</button>
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No departments yet. Add one above.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function showDeptModal(id) {
+      const dept = id ? DB.Departments.getById(id) : null;
+      Modal.create('dept', {
+        title: dept ? 'Edit Department' : 'Add Department',
+        size: 'sm',
+        body: `
+          <div class="form-group"><label class="form-label required">Department Name</label><input type="text" class="form-input" id="dept-name" value="${dept?.name || ''}" placeholder="e.g. Science & Technology" required></div>
+          <div class="form-group"><label class="form-label">Department Code</label><input type="text" class="form-input" id="dept-code" value="${dept?.code || ''}" placeholder="e.g. SCI" maxlength="10"></div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('dept')">Cancel</button>
+                 <button class="btn btn-primary" onclick="saveDept('${id || ''}')">${dept ? 'Update' : 'Create'} Department</button>`,
+      });
+    }
+
+    function saveDept(id) {
+      const name = document.getElementById('dept-name')?.value.trim();
+      const code = document.getElementById('dept-code')?.value.trim();
+      if (!name) { Toast.error('Name required', 'Please enter a department name.'); return; }
+      if (id) { DB.Departments.update(id, { name, code }, session.userId); Toast.success('Updated', 'Department updated.'); }
+      else { DB.Departments.create({ name, code }, session.userId); Toast.success('Created', 'Department added.'); }
+      Modal.close('dept');
+      renderDepartments(document.getElementById('page-content'));
+    }
+
+    function deleteDept(id) {
+      const students = DB.Users.getAll().filter(u => u.departmentId === id);
+      if (students.length) { Toast.error('Cannot delete', `This department has ${students.length} student(s). Reassign them first.`); return; }
+      Modal.confirm({ title: 'Delete Department', message: 'Are you sure? This action cannot be undone.', confirmText: 'Delete', onConfirm: () => {
+        DB.Departments.delete(id, session.userId);
+        Toast.success('Deleted', 'Department removed.');
+        renderDepartments(document.getElementById('page-content'));
+      }});
+    }
+
+    // ── Courses ──────────────────────────────────────────────────
+    function renderCourses(container) {
+      const courses = DB.Courses.getAll();
+      const depts = DB.Departments.getAll();
+      container.innerHTML = `
+        <div class="page-header">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div><h1 class="page-title">Courses</h1><p class="page-subtitle">${courses.length} course(s) configured.</p></div>
+            <button class="btn btn-primary" onclick="showCourseModal()">${Icons.plus} Add Course</button>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead><tr><th>Course Name</th><th>Code</th><th>Department</th><th>Semesters</th><th>Students</th><th>Actions</th></tr></thead>
+              <tbody>${courses.length ? courses.map(c => {
+                const dept = depts.find(d => d.id === c.departmentId);
+                const students = DB.Users.getAll().filter(u => u.courseId === c.id);
+                return `<tr>
+                  <td><strong>${c.name}</strong></td>
+                  <td><span class="badge badge-gray">${c.code || '—'}</span></td>
+                  <td>${dept?.name || '—'}</td>
+                  <td><span class="sem-count-badge">${c.semesterCount}</span></td>
+                  <td>${students.length}</td>
+                  <td>
+                    <div class="flex gap-2">
+                      <button class="btn btn-secondary btn-sm btn-icon" onclick="showCourseModal('${c.id}')">${Icons.edit}</button>
+                      <button class="btn btn-danger btn-sm btn-icon" onclick="deleteCourse('${c.id}')">${Icons.trash}</button>
+                    </div>
+                  </td>
+                </tr>`;
+              }).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No courses yet.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function showCourseModal(id) {
+      const course = id ? DB.Courses.getById(id) : null;
+      const depts = DB.Departments.getAll();
+      Modal.create('course', {
+        title: course ? 'Edit Course' : 'Add Course',
+        body: `
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label required">Course Name</label><input type="text" class="form-input" id="c-name" value="${course?.name || ''}" placeholder="e.g. BSc Computer Science"></div>
+            <div class="form-group"><label class="form-label">Course Code</label><input type="text" class="form-input" id="c-code" value="${course?.code || ''}" placeholder="e.g. BSC_CS"></div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label required">Department</label>
+              <select class="form-select" id="c-dept">
+                <option value="">— Select Department —</option>
+                ${depts.map(d => `<option value="${d.id}" ${course?.departmentId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label required">Number of Semesters</label>
+              <input type="number" class="form-input" id="c-sems" value="${course?.semesterCount || 6}" min="1" max="20" placeholder="e.g. 6 for UG, 4 for PG">
+              <div class="form-hint">Sets how many semester sections appear for all students in this course.</div>
+            </div>
+          </div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('course')">Cancel</button>
+                 <button class="btn btn-primary" onclick="saveCourse('${id || ''}')">${course ? 'Update' : 'Create'} Course</button>`,
+      });
+    }
+
+    function saveCourse(id) {
+      const name = document.getElementById('c-name')?.value.trim();
+      const code = document.getElementById('c-code')?.value.trim();
+      const deptId = document.getElementById('c-dept')?.value;
+      const sems = parseInt(document.getElementById('c-sems')?.value);
+      if (!name || !deptId || !sems || sems < 1) { Toast.error('Missing fields', 'Name, department, and semester count are required.'); return; }
+      if (id) DB.Courses.update(id, { name, code, departmentId: deptId, semesterCount: sems }, session.userId);
+      else DB.Courses.create({ name, code, departmentId: deptId, semesterCount: sems }, session.userId);
+      Toast.success(id ? 'Updated' : 'Created', `Course ${id ? 'updated' : 'added'} with ${sems} semesters.`);
+      Modal.close('course');
+      renderCourses(document.getElementById('page-content'));
+    }
+
+    function deleteCourse(id) {
+      const students = DB.Users.getAll().filter(u => u.courseId === id);
+      if (students.length) { Toast.error('Cannot delete', `${students.length} student(s) enrolled. Reassign first.`); return; }
+      Modal.confirm({ title: 'Delete Course', message: 'Delete this course permanently?', confirmText: 'Delete', onConfirm: () => {
+        DB.Courses.delete(id, session.userId); Toast.success('Deleted', 'Course removed.');
+        renderCourses(document.getElementById('page-content'));
+      }});
+    }
+
+    // ── Users ────────────────────────────────────────────────────
+    let userFilter = { role: 'all', search: '' };
+
+    // Filter tabs: Admin removed. "Department" = HOD + Teachers (dept staff).
+    const USER_FILTERS = [
+      { key: 'all', label: 'All' },
+      { key: 'principal', label: 'Principal' },
+      { key: 'department', label: 'Department' },
+      { key: 'parent', label: 'Parent' },
+      { key: 'student', label: 'Student' },
+    ];
+
+    function getFilteredUsers() {
+      let users = DB.Users.getAll().sort((a, b) => a.name.localeCompare(b.name));
+      if (userFilter.role === 'department') users = users.filter(u => u.role === 'hod' || u.role === 'mentor');
+      else if (userFilter.role !== 'all') users = users.filter(u => u.role === userFilter.role);
+      if (userFilter.search) users = users.filter(u => u.name.toLowerCase().includes(userFilter.search) || u.email.toLowerCase().includes(userFilter.search) || (u.parentEmail || '').toLowerCase().includes(userFilter.search));
+      return users;
+    }
+
+    function renderUsers(container) {
+      const totalUsers = DB.Users.getAll().length;
+      container.innerHTML = `
+        <div class="page-header">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
+            <div><h1 class="page-title">Users</h1><p class="page-subtitle">${totalUsers} total accounts.</p></div>
+            <div class="flex gap-3">
+              <button class="btn btn-secondary" onclick="navigateTo('import')">${Icons.upload} Import CSV</button>
+              <button class="btn btn-primary" onclick="showAddUserModal()">${Icons.plus} Add User</button>
+            </div>
+          </div>
+        </div>
+        <div class="section-card" style="margin-bottom:var(--space-4)">
+          <div class="section-card-body" style="padding:var(--space-4)">
+            <div class="flex gap-3 flex-wrap">
+              <div class="search-bar" style="max-width:280px">${Icons.search}<input type="text" placeholder="Search name, email or parent email…" id="user-search" oninput="filterUsers()" value="${userFilter.search}"></div>
+              ${USER_FILTERS.map(f => `<button class="btn ${userFilter.role === f.key ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setUserFilter('${f.key}')">${f.label}</button>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="section-card">
+          <div class="table-wrapper">
+            <table class="data-table" id="users-table">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Parent Email</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="users-tbody">${renderUsersRows(getFilteredUsers())}</tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    function renderUsersRows(users) {
+      const depts = DB.Departments.getAll();
+      if (!users.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No users found.</td></tr>';
+      return users.map(u => {
+        const dept = depts.find(d => d.id === u.departmentId);
+        const statusBadge = {active:'badge-green',invited:'badge-yellow',suspended:'badge-red'}[u.status] || 'badge-gray';
+        const parentCell = u.role === 'student'
+          ? `<span class="text-sm">${u.parentEmail || '<span class="text-muted">— not set —</span>'}</span>`
+          : '<span class="text-muted">—</span>';
+        return `<tr>
+          <td><div class="flex items-center gap-3">${renderAvatar(u.name,'sm')}<span class="font-semibold text-sm">${u.name}</span></div></td>
+          <td class="text-sm text-muted">${u.email}</td>
+          <td>${renderRoleBadge(u.role)}</td>
+          <td class="text-sm">${dept?.name || '—'}</td>
+          <td>${parentCell}</td>
+          <td><span class="badge ${statusBadge}">${u.status}</span></td>
+          <td>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm btn-icon" onclick="showEditUserModal('${u.id}')" title="Edit">${Icons.edit}</button>
+              ${u.status === 'invited' ? `<button class="btn btn-secondary btn-sm" onclick="showInviteLink('${u.id}')" title="Show invite link">${Icons.link}</button>` : ''}
+              <button class="btn btn-danger btn-sm btn-icon" onclick="deleteUser('${u.id}')" title="Delete">${Icons.trash}</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function setUserFilter(role) {
+      userFilter.role = role;
+      renderUsers(document.getElementById('page-content'));
+    }
+
+    function filterUsers() {
+      userFilter.search = document.getElementById('user-search')?.value.toLowerCase() || '';
+      const tbody = document.getElementById('users-tbody');
+      if (tbody) tbody.innerHTML = renderUsersRows(getFilteredUsers());
+    }
+
+    function showAddUserModal() {
+      const depts = DB.Departments.getAll();
+      const courses = DB.Courses.getAll();
+      Modal.create('add-user', {
+        title: 'Add New User', size: 'lg',
+        body: `
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label required">Full Name</label><input type="text" class="form-input" id="u-name" placeholder="Dr. Priya Nair"></div>
+            <div class="form-group"><label class="form-label required">Personal Email</label><input type="email" class="form-input" id="u-email" placeholder="personal.email@gmail.com"></div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label required">Role</label>
+              <select class="form-select" id="u-role" onchange="toggleUserFields()">
+                <option value="">— Select Role —</option>
+                <option value="principal">Principal</option>
+                <option value="hod">HOD</option>
+                <option value="mentor">Teacher / Faculty</option>
+                <option value="student">Student</option>
+                <option value="parent">Parent</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Phone Number</label><input type="tel" class="form-input" id="u-phone" placeholder="9876543210"></div>
+          </div>
+          <div class="form-grid" id="u-dept-course-row">
+            <div class="form-group">
+              <label class="form-label">Department</label>
+              <select class="form-select" id="u-dept" onchange="populateCourses()">
+                <option value="">— Select Department —</option>
+                ${depts.map(d => `<option value="${d.id}">${d.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group" id="u-course-wrap">
+              <label class="form-label">Course</label>
+              <select class="form-select" id="u-course"><option value="">— Select Course —</option></select>
+            </div>
+          </div>
+          <div class="form-group" id="u-parent-wrap" style="display:none">
+            <label class="form-label">Linked Student Email (for Parent role)</label>
+            <input type="email" class="form-input" id="u-parent-student" placeholder="student.email@gmail.com">
+          </div>
+          <div class="form-group" id="u-student-parent-wrap" style="display:none">
+            <label class="form-label">Parent Email (personal email of parent)</label>
+            <input type="email" class="form-input" id="u-student-parent" placeholder="parent.email@gmail.com">
+          </div>
+          <div class="alert alert-info">${Icons.info} An invite email will be sent to the user's personal email with a secure link to set their password.</div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('add-user')">Cancel</button>
+                 <button class="btn btn-primary" onclick="saveAddUser()">Create & Send Invite</button>`,
+      });
+    }
+
+    function toggleUserFields() {
+      const role = document.getElementById('u-role')?.value;
+      const parentWrap = document.getElementById('u-parent-wrap');
+      const courseWrap = document.getElementById('u-course-wrap');
+      const studentParentWrap = document.getElementById('u-student-parent-wrap');
+      if (parentWrap) parentWrap.style.display = role === 'parent' ? 'block' : 'none';
+      if (courseWrap) courseWrap.style.display = role === 'student' ? 'block' : 'none';
+      if (studentParentWrap) studentParentWrap.style.display = role === 'student' ? 'block' : 'none';
+    }
+
+    function populateCourses() {
+      const deptId = document.getElementById('u-dept')?.value;
+      const courseSelect = document.getElementById('u-course');
+      if (!courseSelect) return;
+      const courses = deptId ? DB.Courses.getByDepartment(deptId) : [];
+      courseSelect.innerHTML = `<option value="">— Select Course —</option>` + courses.map(c => `<option value="${c.id}">${c.name} (${c.semesterCount} sem)</option>`).join('');
+    }
+
+    async function saveAddUser() {
+      const name = document.getElementById('u-name')?.value.trim();
+      const email = document.getElementById('u-email')?.value.trim();
+      const role = document.getElementById('u-role')?.value;
+      const deptId = document.getElementById('u-dept')?.value || null;
+      const courseId = document.getElementById('u-course')?.value || null;
+      const phone = document.getElementById('u-phone')?.value.trim() || null;
+      const parentEmail = role === 'student' ? (document.getElementById('u-student-parent')?.value.trim() || null) : null;
+      const linkedStudentEmail = role === 'parent' ? (document.getElementById('u-parent-student')?.value.trim().toLowerCase() || null) : null;
+      const linkedStudent = linkedStudentEmail ? DB.Users.getAll().find(u => u.email.toLowerCase() === linkedStudentEmail) : null;
+
+      if (!name || !email || !role) { Toast.error('Missing fields', 'Name, email, and role are required.'); return; }
+
+      const result = await DB.Users.create({ name, email, role, departmentId: deptId, courseId, phone, parentEmail, linkedStudentId: linkedStudent?.id || null }, session.userId);
+      if (!result.ok) { Toast.error('Error', result.error); return; }
+
+      Modal.close('add-user');
+      Toast.success('User created!', `Invite sent to ${email}.`);
+
+      // Show invite link in demo
+      const link = `${window.location.origin}${window.location.pathname.replace('admin.html', '')}set-password.html?invite=${result.inviteToken}`;
+      setTimeout(() => {
+        Modal.create('invite-link-show', {
+          title: 'Invite Link Generated', size: 'sm',
+          body: `<p class="text-sm text-muted mb-4">In demo mode, no email is sent. Share this link with <strong>${name}</strong>:</p>
+                 <div class="invite-token-box"><a href="${link}" target="_blank" class="invite-link-url">${link}</a></div>
+                 <button class="btn btn-secondary btn-sm mt-4" onclick="navigator.clipboard.writeText('${link}');Toast.success('Copied!')">Copy Link</button>`,
+          footer: `<button class="btn btn-primary" onclick="Modal.close('invite-link-show')">Done</button>`,
+        });
+      }, 300);
+
+      renderUsers(document.getElementById('page-content'));
+    }
+
+    function showEditUserModal(id) {
+      const user = DB.Users.getById(id);
+      if (!user) return;
+      const depts = DB.Departments.getAll();
+      Modal.create('edit-user', {
+        title: 'Edit User',
+        body: `
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label">Full Name</label><input type="text" class="form-input" id="eu-name" value="${user.name}"></div>
+            <div class="form-group"><label class="form-label">Email</label><input type="email" class="form-input" value="${user.email}" readonly style="background:var(--bg-surface-2)"></div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Role</label>
+              <select class="form-select" id="eu-role">
+                ${['admin','principal','hod','mentor','student','parent'].map(r => `<option value="${r}" ${user.role === r ? 'selected' : ''}>${roleLabel(r)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="eu-status">
+                ${['active','invited','suspended'].map(s => `<option value="${s}" ${user.status === s ? 'selected' : ''}>${Str.capitalize(s)}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Department</label>
+            <select class="form-select" id="eu-dept">
+              <option value="">— None —</option>
+              ${depts.map(d => `<option value="${d.id}" ${user.departmentId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+            </select>
+          </div>
+          ${user.role === 'student' ? `
+          <div class="form-group">
+            <label class="form-label">Parent Email</label>
+            <input type="email" class="form-input" id="eu-parent-email" value="${user.parentEmail || ''}" placeholder="parent.email@gmail.com">
+            <div class="form-hint">Editable by Teacher, HOD, Principal and Admin.</div>
+          </div>
+          <div class="setting-row" style="padding:var(--space-3) 0">
+            <div><div class="setting-label">Parent Access Approved</div><div class="setting-desc">Parent can view this student's report only when approved.</div></div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="eu-parent-approved" ${user.parentApproved ? 'checked' : ''}>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>` : ''}`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-user')">Cancel</button>
+                 <button class="btn btn-primary" onclick="saveEditUser('${id}')">Update User</button>`,
+      });
+    }
+
+    function saveEditUser(id) {
+      const name = document.getElementById('eu-name')?.value.trim();
+      const role = document.getElementById('eu-role')?.value;
+      const status = document.getElementById('eu-status')?.value;
+      const deptId = document.getElementById('eu-dept')?.value || null;
+      if (!name) { Toast.error('Name required'); return; }
+      const patch = { name, role, status, departmentId: deptId };
+      const parentEmailEl = document.getElementById('eu-parent-email');
+      if (parentEmailEl) {
+        patch.parentEmail = parentEmailEl.value.trim().toLowerCase() || null;
+        patch.parentApproved = !!document.getElementById('eu-parent-approved')?.checked;
+        // keep linked parent account email in sync (only when a value is provided)
+        if (patch.parentEmail) DB.ParentLinks.setParentEmail(id, patch.parentEmail, session.userId);
+      }
+      DB.Users.update(id, patch, session.userId);
+      Toast.success('Updated', 'User details updated.');
+      Modal.close('edit-user');
+      renderUsers(document.getElementById('page-content'));
+    }
+
+    function showInviteLink(userId) {
+      const tokens = DB.getArr(DB.KEYS.inviteTokens).filter(t => t.userId === userId && !t.used && t.expiresAt > Date.now());
+      if (!tokens.length) { Toast.warning('No active invite', 'The invite link has expired. Delete and re-add this user.'); return; }
+      const tok = tokens[0];
+      const link = `${window.location.origin}${window.location.pathname.replace('admin.html', '')}set-password.html?invite=${tok.token}`;
+      Modal.create('show-invite', {
+        title: 'Active Invite Link', size: 'sm',
+        body: `<p class="text-sm text-muted mb-4">Share this link with the user. It expires on <strong>${DateFmt.format(new Date(tok.expiresAt).toISOString())}</strong>.</p>
+               <div class="invite-token-box"><a href="${link}" target="_blank" class="invite-link-url">${link}</a></div>
+               <button class="btn btn-secondary btn-sm mt-4" onclick="navigator.clipboard.writeText('${link}');Toast.success('Copied!')">Copy Link</button>`,
+        footer: `<button class="btn btn-primary" onclick="Modal.close('show-invite')">Close</button>`,
+      });
+    }
+
+    function deleteUser(id) {
+      if (id === session.userId) { Toast.error('Cannot delete', 'You cannot delete your own account.'); return; }
+      Modal.confirm({ title: 'Delete User', message: 'This will permanently remove the user and all their data. This cannot be undone.', confirmText: 'Delete User', onConfirm: () => {
+        DB.Users.delete(id, session.userId);
+        Toast.success('Deleted', 'User removed.');
+        renderUsers(document.getElementById('page-content'));
+      }});
+    }
+
+    // ── Bulk Import ──────────────────────────────────────────────
+    function renderImport(container) {
+      container.innerHTML = `
+        <div class="page-header">
+          <h1 class="page-title">Bulk Import Users</h1>
+          <p class="page-subtitle">Import multiple users at once from a CSV or Excel file.</p>
+        </div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:var(--space-6)">
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">${Icons.upload} Upload CSV</div></div>
+            <div class="section-card-body">
+              <div class="alert alert-info mb-4">${Icons.info}
+                <div><strong>CSV Format:</strong> The file must have these columns in order:<br>
+                <code style="font-size:11px;background:var(--bg-surface-2);padding:2px 6px;border-radius:4px">name, email, role, department, course, phone, parentemail</code><br>
+                <span style="font-size:11px;color:var(--text-secondary)">role must be: principal, hod, mentor, student, or parent</span></div>
+              </div>
+              <div class="upload-zone" id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click()">
+                ${Icons.upload}
+                <p><span class="upload-link">Click to upload</span> or drag and drop<br><span style="font-size:var(--font-size-xs)">CSV files only · Max 1MB</span></p>
+              </div>
+              <input type="file" id="csv-file-input" accept=".csv,.txt" style="display:none" onchange="handleCSVFile(this)">
+              <div id="import-preview" style="margin-top:var(--space-4)"></div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">${Icons.fileText} Sample CSV</div></div>
+            <div class="section-card-body">
+              <pre style="background:var(--bg-surface-2);padding:var(--space-4);border-radius:var(--border-radius-md);font-size:11px;overflow-x:auto;white-space:pre">name,email,role,department,course,phone
+Dr. Meera Nair,meera@sbc.edu,mentor,Science & Technology,,9876500000
+Arun Suresh,arun.s@gmail.com,student,Science & Technology,BSc Computer Science,9876511111
+Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9876522222</pre>
+              <button class="btn btn-secondary btn-sm mt-4" onclick="downloadSampleCSV()">
+                ${Icons.download} Download Sample
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="import-results"></div>`;
+
+      // Drag and drop
+      const zone = document.getElementById('csv-drop-zone');
+      zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragging'); });
+      zone.addEventListener('dragleave', () => zone.classList.remove('dragging'));
+      zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('dragging'); const file = e.dataTransfer.files[0]; if (file) processCSV(file); });
+    }
+
+    function handleCSVFile(input) {
+      const file = input.files[0];
+      if (file) processCSV(file);
+    }
+
+    function processCSV(file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const text = e.target.result;
+        const lines = text.trim().split('\n');
+        document.getElementById('import-preview').innerHTML = `
+          <div class="alert alert-info">${Icons.info} ${lines.length - 1} user(s) found in file. Review below and confirm import.</div>
+          <div class="import-preview-table table-wrapper" style="max-height:200px">
+            <table class="data-table"><thead><tr><th>#</th>${lines[0].split(',').map(h => `<th>${h.trim()}</th>`).join('')}</tr></thead>
+            <tbody>${lines.slice(1).map((l, i) => `<tr><td>${i+1}</td>${l.split(',').map(v => `<td class="text-xs">${v.trim()}</td>`).join('')}</tr>`).join('')}</tbody></table>
+          </div>
+          <button class="btn btn-primary mt-4" onclick="doImport(${JSON.stringify(text)})">
+            ${Icons.upload} Import ${lines.length - 1} Users
+          </button>`;
+      };
+      reader.readAsText(file);
+    }
+
+    async function doImport(csvText) {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="loading-spinner"></span> Importing…`;
+      const results = await DB.Users.bulkImport(csvText, session.userId);
+      btn.disabled = false;
+      const ok = results.filter(r => r.ok);
+      const fail = results.filter(r => !r.ok);
+      document.getElementById('import-results').innerHTML = `
+        <div class="section-card mt-6">
+          <div class="section-card-header"><div class="section-card-title">Import Results</div></div>
+          <div class="section-card-body">
+            <div class="flex gap-4 mb-4">
+              <span class="badge badge-green">${ok.length} Successful</span>
+              ${fail.length ? `<span class="badge badge-red">${fail.length} Failed</span>` : ''}
+            </div>
+            ${results.map(r => `<div class="audit-item">
+              <div class="audit-action">${r.ok ? '✓' : '✗'} Row ${r.row} ${r.email ? '— ' + r.email : ''}</div>
+              ${!r.ok ? `<div class="audit-meta text-danger">${r.error}</div>` : `<div class="audit-meta">Invite sent. Token generated.</div>`}
+            </div>`).join('')}
+          </div>
+        </div>`;
+      if (ok.length) Toast.success(`${ok.length} users imported`, 'Invite links have been generated.');
+    }
+
+    function downloadSampleCSV() {
+      exportCSV([
+        { name: 'Dr. Meera Nair', email: 'meera@sbc.edu', role: 'mentor', department: 'Science & Technology', course: '', phone: '9876500000' },
+        { name: 'Arun Suresh', email: 'arun.s@gmail.com', role: 'student', department: 'Science & Technology', course: 'BSc Computer Science', phone: '9876511111' },
+      ], 'mentorfile_import_sample.csv');
+    }
+
+    // ── Classes ──────────────────────────────────────────────────
+    function renderClassesAdmin(container) {
+      const classes = DB.Classes.getAll();
+      container.innerHTML = `
+        <div class="page-header">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div><h1 class="page-title">Classes</h1><p class="page-subtitle">${classes.length} class(es). Students are managed directly through classes.</p></div>
+            <button class="btn btn-primary" onclick="showClassModal()">${Icons.plus} Add Class</button>
+          </div>
+        </div>
+        <div class="section-card"><div class="table-wrapper"><table class="data-table">
+          <thead><tr><th>Class</th><th>Course</th><th>Year</th><th>Duration</th><th>Promotion Date</th><th>In-charge</th><th>Students</th><th>Actions</th></tr></thead>
+          <tbody>${classes.length ? classes.map(c => {
+            const course = DB.Courses.getById(c.courseId);
+            const incharge = c.inchargeId ? DB.Users.getById(c.inchargeId) : null;
+            const nStu = DB.Classes.getStudents(c.id).length;
+            const [mm,dd] = (c.promotionDate||'06-01').split('-');
+            return `<tr>
+              <td><strong>${c.name}</strong></td>
+              <td>${course?.name || '—'}</td>
+              <td>Year ${c.currentYear} / ${c.durationYears}</td>
+              <td>${c.durationYears} yrs</td>
+              <td>${dd}-${mm}</td>
+              <td>${incharge ? incharge.name : '<span class="text-muted">—</span>'}</td>
+              <td>${nStu}</td>
+              <td><div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm btn-icon" onclick="showClassModal('${c.id}')" title="Edit">${Icons.edit}</button>
+                <button class="btn btn-danger btn-sm btn-icon" onclick="deleteClassAdmin('${c.id}')" title="Delete">${Icons.trash}</button>
+              </div></td>
+            </tr>`;
+          }).join('') : '<tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No classes yet.</td></tr>'}</tbody>
+        </table></div></div>`;
+    }
+
+    function showClassModal(id) {
+      const cls = id ? DB.Classes.getById(id) : null;
+      const courses = DB.Courses.getAll();
+      const faculty = DB.Users.getByRole('mentor');
+      const [mm, dd] = (cls?.promotionDate || '06-01').split('-');
+      Modal.create('class', {
+        title: cls ? 'Edit Class' : 'Add Class', size: 'md',
+        body: `
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label required">Year</label>
+              <select class="form-select" id="cl-year">${[1,2,3,4,5,6].map(y=>`<option value="${y}" ${cls?.currentYear===y?'selected':''}>${y}</option>`).join('')}</select>
+            </div>
+            <div class="form-group"><label class="form-label required">Course</label>
+              <select class="form-select" id="cl-course">${courses.map(c=>`<option value="${c.id}" data-code="${c.code||''}" ${cls?.courseId===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+            </div>
+            <div class="form-group"><label class="form-label required">Batch</label>
+              <select class="form-select" id="cl-batch">${['A','B','C','D'].map(b=>`<option value="${b}" ${cls?.batch===b?'selected':''}>${b}</option>`).join('')}</select>
+            </div>
+          </div>
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label required">Course Duration (years)</label><input type="number" class="form-input" id="cl-dur" value="${cls?.durationYears||3}" min="1" max="6"></div>
+            <div class="form-group"><label class="form-label">Promotion Date</label><input type="date" class="form-input" id="cl-promo" value="2026-${mm}-${dd}">
+              <div class="form-hint">Default 1 June. Class auto-advances each year on this date until duration ends.</div></div>
+            <div class="form-group"><label class="form-label">Class In-charge</label>
+              <select class="form-select" id="cl-incharge"><option value="">— None —</option>${faculty.map(f=>`<option value="${f.id}" ${cls?.inchargeId===f.id?'selected':''}>${f.name}</option>`).join('')}</select>
+            </div>
+          </div>
+          <div class="alert alert-info">${Icons.info} Class name is auto-built as <strong>Year + Course code + Batch</strong> (e.g. "2 BSC-CS A").</div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('class')">Cancel</button>
+                 <button class="btn btn-primary" onclick="saveClassAdmin('${id||''}')">${cls?'Update':'Create'} Class</button>`,
+      });
+    }
+
+    function saveClassAdmin(id) {
+      const year = document.getElementById('cl-year').value;
+      const courseSel = document.getElementById('cl-course');
+      const courseId = courseSel.value;
+      const courseCode = courseSel.options[courseSel.selectedIndex]?.dataset.code || '';
+      const batch = document.getElementById('cl-batch').value;
+      const durationYears = document.getElementById('cl-dur').value;
+      const promo = document.getElementById('cl-promo').value; // yyyy-mm-dd
+      const promotionDate = promo ? promo.slice(5) : '06-01'; // mm-dd
+      const inchargeId = document.getElementById('cl-incharge').value || null;
+      const data = { currentYear: year, courseId, courseCode, batch, durationYears, promotionDate, inchargeId };
+      if (id) DB.Classes.update(id, data, session.userId);
+      else DB.Classes.create(data, session.userId);
+      Toast.success(id ? 'Updated' : 'Created', 'Class saved.');
+      Modal.close('class');
+      renderClassesAdmin(document.getElementById('page-content'));
+    }
+
+    function deleteClassAdmin(id) {
+      const n = DB.Classes.getStudents(id).length;
+      Modal.confirm({ title: 'Delete Class', message: `Delete this class?${n?` ${n} student(s) will be unlinked.`:''}`, confirmText: 'Delete', onConfirm: () => {
+        DB.Classes.getStudents(id).forEach(s => DB.Users.update(s.id, { classId: null }, session.userId));
+        DB.Classes.delete(id, session.userId);
+        Toast.success('Deleted', 'Class removed.');
+        renderClassesAdmin(document.getElementById('page-content'));
+      }});
+    }
+
+    // ── Settings ─────────────────────────────────────────────────
+    function renderSettings(container) {
+      const settings = DB.Settings.get();
+      const college = settings.collegeInfo || {};
+      const cats = DB.Settings.getExtraCreditCategories();
+      const progCats = DB.Settings.getProgressionCategories();
+      container.innerHTML = `
+        <div class="page-header">
+          <h1 class="page-title">System Settings</h1>
+          <p class="page-subtitle">Configure institution-wide settings. All changes take effect immediately.</p>
+        </div>
+
+        <div class="tabs" id="settings-tabs" style="margin-bottom:var(--space-6)">
+          ${['College Info','Email Config','Categories','Email Templates','Access Control'].map((t, i) => `<button class="tab-btn ${i===0?'active':''}" onclick="switchSettingsTab(${i},this)">${t}</button>`).join('')}
+        </div>
+
+        <!-- College Info -->
+        <div class="tab-content active" id="stab-0">
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">College Information</div></div>
+            <div class="section-card-body">
+              <div class="form-grid">
+                <div class="form-group"><label class="form-label required">Institution Name</label><input type="text" class="form-input" id="s-col-name" value="${college.name || ''}"></div>
+                <div class="form-group"><label class="form-label">Location</label><input type="text" class="form-input" id="s-col-loc" value="${college.location || ''}"></div>
+              </div>
+              <div class="form-group"><label class="form-label">Tagline / Subtitle</label><input type="text" class="form-input" id="s-col-tagline" value="${college.tagline || ''}"></div>
+              <button class="btn btn-primary" onclick="saveCollegeInfo()">Save College Info</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Email Config -->
+        <div class="tab-content" id="stab-1">
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">${Icons.mail} Email Provider Configuration</div></div>
+            <div class="section-card-body">
+              <div class="alert alert-info mb-4">${Icons.info} Configure your email provider. The app supports SMTP (Gmail, Outlook, custom) or API-based services (SendGrid, Resend, Mailgun).</div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label class="form-label">Provider Type</label>
+                  <select class="form-select" id="s-email-type" onchange="toggleEmailFields()">
+                    <option value="smtp" ${settings.emailProvider?.type==='smtp'?'selected':''}>SMTP</option>
+                    <option value="sendgrid" ${settings.emailProvider?.type==='sendgrid'?'selected':''}>SendGrid</option>
+                    <option value="resend" ${settings.emailProvider?.type==='resend'?'selected':''}>Resend</option>
+                    <option value="mailgun" ${settings.emailProvider?.type==='mailgun'?'selected':''}>Mailgun</option>
+                  </select>
+                </div>
+                <div class="form-group"><label class="form-label">From Email Address</label><input type="email" class="form-input" id="s-from-email" value="${settings.emailProvider?.fromEmail || ''}" placeholder="noreply@sbc.edu"></div>
+              </div>
+              <div id="smtp-fields">
+                <div class="form-grid">
+                  <div class="form-group"><label class="form-label">SMTP Host</label><input type="text" class="form-input" id="s-smtp-host" value="${settings.emailProvider?.host || ''}" placeholder="smtp.gmail.com"></div>
+                  <div class="form-group"><label class="form-label">SMTP Port</label><input type="number" class="form-input" id="s-smtp-port" value="${settings.emailProvider?.port || 587}" placeholder="587"></div>
+                  <div class="form-group"><label class="form-label">SMTP Username</label><input type="text" class="form-input" id="s-smtp-user" value="${settings.emailProvider?.user || ''}"></div>
+                  <div class="form-group"><label class="form-label">SMTP Password</label><input type="password" class="form-input" id="s-smtp-pass" value="${settings.emailProvider?.password || ''}"></div>
+                </div>
+              </div>
+              <div id="api-fields" style="display:none">
+                <div class="form-group"><label class="form-label">API Key</label><input type="password" class="form-input" id="s-api-key" value="${settings.emailProvider?.apiKey || ''}"></div>
+              </div>
+              <button class="btn btn-primary" onclick="saveEmailConfig()">Save Email Settings</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Categories -->
+        <div class="tab-content" id="stab-2">
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">Configurable Categories</div></div>
+            <div class="section-card-body">
+              <div class="form-group">
+                <label class="form-label">Extra Credit Course Categories</label>
+                <div class="form-hint mb-2">These appear as options in the Extra Credit section of each student's file. Add, remove, or rename freely.</div>
+                <div class="tag-input-wrap" id="ec-tags-wrap" onclick="document.getElementById('ec-tag-input').focus()">
+                  ${cats.map(c => `<div class="tag-item">${c}<button class="tag-remove" onclick="removeTag('ec','${c}')">×</button></div>`).join('')}
+                  <input type="text" class="tag-add-input" id="ec-tag-input" placeholder="Add category…" onkeydown="addTagOnEnter(event,'ec')">
+                </div>
+              </div>
+              <div class="form-group mt-6">
+                <label class="form-label">Progression Outcome Categories</label>
+                <div class="form-hint mb-2">Options for student progression/placement records.</div>
+                <div class="tag-input-wrap" id="prog-tags-wrap" onclick="document.getElementById('prog-tag-input').focus()">
+                  ${progCats.map(c => `<div class="tag-item">${c}<button class="tag-remove" onclick="removeTag('prog','${c}')">×</button></div>`).join('')}
+                  <input type="text" class="tag-add-input" id="prog-tag-input" placeholder="Add category…" onkeydown="addTagOnEnter(event,'prog')">
+                </div>
+              </div>
+              <button class="btn btn-primary mt-4" onclick="saveCategories()">Save Categories</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Email Templates -->
+        <div class="tab-content" id="stab-3">
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">Email Templates</div></div>
+            <div class="section-card-body">
+              ${Object.entries(DB.Settings.getEmailTemplates()).map(([key, tmpl]) => `
+                <div style="margin-bottom:var(--space-6);padding-bottom:var(--space-6);border-bottom:1px solid var(--border-color)">
+                  <h3 style="font-size:var(--font-size-sm);font-weight:700;text-transform:capitalize;margin-bottom:var(--space-3)">${key.replace(/([A-Z])/g, ' $1')}</h3>
+                  <div class="form-group"><label class="form-label">Subject</label><input type="text" class="form-input" id="tmpl-${key}-sub" value="${tmpl.subject}"></div>
+                  <div class="form-group"><label class="form-label">Body</label><textarea class="form-textarea" id="tmpl-${key}-body" rows="4">${tmpl.body}</textarea>
+                  <div class="form-hint">Variables: {{name}}, {{link}}, {{date}}</div></div>
+                </div>`).join('')}
+              <button class="btn btn-primary" onclick="saveEmailTemplates()">Save Templates</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Access Control -->
+        <div class="tab-content" id="stab-4">
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">${Icons.key} Access Control</div></div>
+            <div class="section-card-body">
+              ${[
+                ['ssoEnabled', 'Google/Microsoft SSO', 'Allow users to sign in with Google or Microsoft work accounts (requires OAuth setup).'],
+                ['twoFactorEnabled', 'Two-Factor Authentication (Email OTP)', 'Require Admin and HOD accounts to verify via OTP.'],
+                ['parentLoginEnabled', 'Parent Login Portal', 'Allow parents to log in with their own credentials to view their child\'s progress.'],
+                ['parentLinkEnabled', 'Parent Secure Link Access', 'Allow parents to access via a secure emailed link (no password required).'],
+              ].map(([key, label, desc]) => `
+                <div class="setting-row">
+                  <div><div class="setting-label">${label}</div><div class="setting-desc">${desc}</div></div>
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="toggle-${key}" ${settings[key] ? 'checked' : ''} onchange="saveToggle('${key}',this.checked)">
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function switchSettingsTab(idx, btn) {
+      document.querySelectorAll('#settings-tabs .tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+      document.querySelectorAll('[id^="stab-"]').forEach((t, i) => t.classList.toggle('active', i === idx));
+    }
+
+    function toggleEmailFields() {
+      const type = document.getElementById('s-email-type')?.value;
+      document.getElementById('smtp-fields').style.display = type === 'smtp' ? 'block' : 'none';
+      document.getElementById('api-fields').style.display = type !== 'smtp' ? 'block' : 'none';
+    }
+
+    function saveCollegeInfo() {
+      DB.Settings.set({ collegeInfo: { name: document.getElementById('s-col-name')?.value, tagline: document.getElementById('s-col-tagline')?.value, location: document.getElementById('s-col-loc')?.value } });
+      Toast.success('Saved', 'College info updated.');
+      buildAdminSidebar();
+    }
+
+    function saveEmailConfig() {
+      const type = document.getElementById('s-email-type')?.value;
+      DB.Settings.set({ emailProvider: { type, fromEmail: document.getElementById('s-from-email')?.value, host: document.getElementById('s-smtp-host')?.value, port: parseInt(document.getElementById('s-smtp-port')?.value), user: document.getElementById('s-smtp-user')?.value, password: document.getElementById('s-smtp-pass')?.value, apiKey: document.getElementById('s-api-key')?.value } });
+      Toast.success('Saved', 'Email settings updated.');
+    }
+
+    function getTagsFromWrap(prefix) {
+      return Array.from(document.querySelectorAll(`#${prefix}-tags-wrap .tag-item`)).map(el => el.textContent.replace('×', '').trim()).filter(Boolean);
+    }
+
+    function removeTag(prefix, cat) {
+      const wrap = document.getElementById(`${prefix}-tags-wrap`);
+      const tags = Array.from(wrap.querySelectorAll('.tag-item'));
+      tags.forEach(t => { if (t.textContent.replace('×','').trim() === cat) t.remove(); });
+    }
+
+    function addTagOnEnter(e, prefix) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const val = e.target.value.trim();
+        if (!val) return;
+        const existing = getTagsFromWrap(prefix);
+        if (existing.includes(val)) { Toast.warning('Exists', 'Category already in list.'); return; }
+        const wrap = document.getElementById(`${prefix}-tags-wrap`);
+        const tag = document.createElement('div');
+        tag.className = 'tag-item';
+        tag.innerHTML = `${val}<button class="tag-remove" onclick="this.closest('.tag-item').remove()">×</button>`;
+        wrap.insertBefore(tag, e.target);
+        e.target.value = '';
+      }
+    }
+
+    function saveCategories() {
+      DB.Settings.set({ extraCreditCategories: getTagsFromWrap('ec'), progressionCategories: getTagsFromWrap('prog') });
+      Toast.success('Saved', 'Categories updated.');
+    }
+
+    function saveEmailTemplates() {
+      const templates = {};
+      ['invite','reset','meetingReminder'].forEach(key => {
+        const sub = document.getElementById(`tmpl-${key}-sub`)?.value;
+        const body = document.getElementById(`tmpl-${key}-body`)?.value;
+        if (sub && body) templates[key] = { subject: sub, body };
+      });
+      DB.Settings.set({ emailTemplates: templates });
+      Toast.success('Saved', 'Email templates updated.');
+    }
+
+    function saveToggle(key, val) {
+      DB.Settings.set({ [key]: val });
+      Toast.success('Saved', `Setting updated.`);
+    }
+
+    // ── Audit Log ────────────────────────────────────────────────
+    function renderAudit(container) {
+      const log = DB.AuditLog.getAll().slice(0, 100);
+      const allUsers = DB.Users.getAll();
+      container.innerHTML = `
+        <div class="page-header">
+          <h1 class="page-title">Audit Log</h1>
+          <p class="page-subtitle">Last ${log.length} actions. Everything is tracked and attributed.</p>
+        </div>
+        <div class="section-card">
+          <div class="section-card-body">
+            ${log.length ? log.map(l => {
+              const user = allUsers.find(u => u.id === l.userId);
+              return `<div class="audit-item">
+                <div class="audit-action">${l.action} <span class="badge badge-gray" style="font-size:10px">${l.target}</span></div>
+                <div class="audit-meta">by ${user?.name || l.userId} · ${DateFmt.relativeTime(l.timestamp)}</div>
+              </div>`;
+            }).join('') : '<div class="empty-state"><div class="empty-state-icon">${Icons.fileText}</div><h3>No audit logs yet</h3></div>'}
+          </div>
+        </div>`;
+    }
+
+    // ── Notifications panel ──────────────────────────────────────
+    function showNotifications() {
+      const notifs = DB.Notifications.getForUser(session.userId);
+      DB.Notifications.markAllRead(session.userId);
+      updateNotifBadge();
+      Modal.create('notifs', {
+        title: 'Notifications',
+        body: notifs.length ? notifs.map(n => `
+          <div style="padding:var(--space-3) 0;border-bottom:1px solid var(--border-color)">
+            <div style="font-weight:600;font-size:var(--font-size-sm);color:var(--text-primary)">${n.title}</div>
+            <div style="font-size:var(--font-size-xs);color:var(--text-secondary);margin-top:2px">${n.message}</div>
+            <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${DateFmt.relativeTime(n.createdAt)}</div>
+          </div>`).join('') : '<div class="empty-state"><p>No notifications.</p></div>',
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('notifs')">Close</button>`,
+      });
+    }
+  </script>
+</body>
+</html>

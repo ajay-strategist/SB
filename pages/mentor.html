@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mentor Dashboard — MentorFile</title>
+  <link rel="stylesheet" href="../css/main.css">
+  <style>
+    .mentee-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: var(--space-5);
+    }
+    .profile-section-title {
+      font-size: var(--font-size-base);
+      font-weight: 700;
+      color: var(--brand-primary);
+      margin: var(--space-6) 0 var(--space-4);
+      padding-bottom: var(--space-2);
+      border-bottom: 2px solid var(--border-color);
+    }
+    .avatar-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-6);
+      background: var(--bg-surface-2);
+      border-radius: var(--border-radius-lg);
+    }
+    /* Traits score styling */
+    .trait-rating {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      margin-bottom: var(--space-3);
+    }
+    .trait-label {
+      flex: 1;
+      font-size: var(--font-size-sm);
+      font-weight: 500;
+    }
+    .rating-dots {
+      display: flex;
+      gap: 4px;
+    }
+    .rating-dot-btn {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      border: 1px solid var(--border-color-strong);
+      background: var(--bg-surface);
+      cursor: pointer;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition-fast);
+    }
+    .rating-dot-btn.active {
+      background: var(--brand-primary);
+      color: white;
+      border-color: var(--brand-primary);
+    }
+    .sig-display-box {
+      border: 1px dashed var(--border-color-strong);
+      border-radius: var(--border-radius-md);
+      padding: var(--space-4);
+      background: var(--bg-surface-2);
+      min-height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .back-btn {
+      margin-bottom: var(--space-5);
+    }
+    .qual-card {
+      border: 1px solid var(--border-color);
+      border-radius: var(--border-radius-lg);
+      padding: var(--space-4);
+      background: var(--bg-surface);
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    }
+    .qual-card:hover { border-color: var(--border-color-strong); box-shadow: var(--shadow-xs); }
+    .qual-rate .rating-dot-btn { width: 30px; height: 30px; font-weight: 600; }
+    .qual-rate .rating-dot-btn.active { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
+    /* Meeting Report */
+    .mr-block { border-radius: var(--border-radius-lg); padding: var(--space-5); margin-bottom: var(--space-5); border-left: 4px solid var(--brand-primary); background: var(--bg-surface-2); }
+    .mr-block h4 { display: flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-sm); font-weight: 700; margin: 0 0 var(--space-3); text-transform: uppercase; letter-spacing: 0.03em; }
+    .mr-block h4 svg { width: 18px; height: 18px; }
+    .mr-item { display: flex; gap: var(--space-4); padding: var(--space-3) 0; border-bottom: 1px dashed var(--border-color); align-items: baseline; }
+    .mr-item:last-child { border-bottom: none; }
+    .mr-date { flex-shrink: 0; font-size: 11px; font-weight: 600; color: var(--text-tertiary); min-width: 92px; }
+    .mr-text { font-size: var(--font-size-sm); color: var(--text-primary); line-height: 1.55; }
+    .mr-goals { border-left-color: #059669; }
+    .mr-goals h4 { color: #047857; }
+    .mr-disc { border-left-color: #4F46E5; }
+    .mr-disc h4 { color: #4338CA; }
+    .mr-conf { border-left-color: #DC2626; background: rgba(220,38,38,0.04); }
+    .mr-conf h4 { color: #B91C1C; }
+    .mr-empty { color: var(--text-tertiary); font-size: var(--font-size-sm); padding: var(--space-2) 0; }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Mobile overlay -->
+    <div class="mobile-overlay" id="mobile-overlay" onclick="closeMobileSidebar()"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div id="sidebar-content"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <header class="top-header">
+        <div class="header-left">
+          <button class="sidebar-toggle-btn" onclick="toggleSidebar()" aria-label="Toggle sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <nav class="breadcrumb" id="breadcrumb">
+            <span>Mentor</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="9 18 15 12 9 6"/></svg>
+            <span class="current" id="breadcrumb-current">Dashboard</span>
+          </nav>
+        </div>
+        <div class="header-right">
+          <button class="header-btn" onclick="Theme.toggle()" title="Toggle theme" aria-label="Toggle dark mode">
+            <span id="theme-icon-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></span>
+          </button>
+          <button class="header-btn" onclick="showNotifications()" aria-label="Notifications">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="badge" id="notif-badge" style="display:none">0</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Page Content Container -->
+      <div class="page-content" id="page-content">
+        <div class="page-loader"><div class="loading-spinner"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/db.js"></script>
+  <script src="../js/utils.js"></script>
+  <script>
+    let session;
+    let selectedStudentId = null;
+    let activeSubTab = 'profile';
+    let currentRecordSemester = 1;
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await DB.init();
+      session = requireAuth(['mentor']);
+      if (!session) return;
+
+      buildMentorSidebar();
+      updateThemeIcon();
+      updateNotifBadge();
+      renderDashboard();
+    });
+
+    function buildMentorSidebar() {
+      const college = DB.Settings.getCollegeInfo();
+      document.getElementById('sidebar-content').innerHTML = `
+        <div class="sidebar-logo">
+          <img src="../SB Logo.png" alt="St. Berchmans College" style="height:42px;object-fit:contain">
+          <div class="sidebar-logo-text"><p>Teacher Portal</p></div>
+        </div>
+        <nav class="sidebar-nav">
+          <div class="nav-section">
+            <div class="nav-section-label">Overview</div>
+            <button class="nav-item active" id="nav-dashboard" onclick="showMentorTab('dashboard')">${Icons.home}<span class="nav-item-text">Dashboard</span></button>
+            <button class="nav-item" id="nav-class" onclick="showMentorTab('class')">${Icons.grid}<span class="nav-item-text">Class</span></button>
+            <button class="nav-item" id="nav-settings" onclick="showUserMenu()">${Icons.settings}<span class="nav-item-text">Profile & Settings</span></button>
+          </div>
+        </nav>
+        <div class="sidebar-footer">
+          <div class="sidebar-user" onclick="showUserMenu()">
+            ${renderAvatar(session.name, 'sm')}
+            <div class="sidebar-user-info">
+              <div class="name">${session.name}</div>
+              <div class="role">${roleLabel(session.role)}</div>
+            </div>
+          </div>
+          <button class="btn btn-danger btn-full btn-sm" style="margin-top:var(--space-3)" onclick="logout()">${Icons.logOut}<span style="margin-left:6px">Sign Out</span></button>
+        </div>`;
+    }
+
+    // ── Top-level tab navigation (Dashboard | Class [Class/Students view]) ──
+    let mentorTab = 'dashboard';
+    let classViewMode = 'class'; // 'class' | 'students'
+    function showMentorTab(tab) {
+      mentorTab = tab; selectedStudentId = null;
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      document.getElementById(`nav-${tab}`)?.classList.add('active');
+      if (tab === 'dashboard') renderDashboard();
+      else if (tab === 'class') renderClassTab();
+    }
+
+    // My students (assigned mentees)
+    function myStudents() {
+      return DB.Assignments.getMentees(session.userId).map(id => DB.Users.getById(id)).filter(Boolean);
+    }
+
+    function renderClassTab() {
+      document.getElementById('breadcrumb-current').textContent = 'Class';
+      const container = document.getElementById('page-content');
+      const students = myStudents();
+      // Group my students by class (course) — only classes where I have students
+      const byCourse = {};
+      students.forEach(s => { (byCourse[s.courseId] = byCourse[s.courseId] || []).push(s); });
+
+      const classView = `
+        <div class="mentee-grid">
+          ${Object.keys(byCourse).map(cid => {
+            const course = DB.Courses.getById(cid);
+            const cs = byCourse[cid];
+            return `<div class="section-card"><div class="section-card-body">
+              <div class="font-semibold">${course?.name || 'Class'}</div>
+              <div class="text-xs text-muted">${course?.semesterCount || 6} semesters</div>
+              <hr class="divider"><div class="text-sm"><strong>My students here:</strong> ${cs.length}</div>
+              <button class="btn btn-secondary btn-sm mt-3" onclick="showClassStudents('${cid}')">View Students</button>
+            </div></div>`;
+          }).join('') || '<div class="empty-state"><p>No classes — you have no assigned students yet.</p></div>'}
+        </div>`;
+
+      container.innerHTML = `
+        <div class="page-header"><h1 class="page-title">My Class</h1><p class="page-subtitle">Only your assigned students are shown.</p></div>
+        <div class="tabs" style="margin-bottom:var(--space-5)">
+          <button class="tab-btn ${classViewMode==='class'?'active':''}" onclick="setClassView('class')">Class View</button>
+          <button class="tab-btn ${classViewMode==='students'?'active':''}" onclick="setClassView('students')">Students View</button>
+        </div>
+        <div id="class-view-body">${classViewMode === 'class' ? classView : studentsTableHTML(students)}</div>`;
+    }
+    function setClassView(mode) { classViewMode = mode; renderClassTab(); }
+    function showClassStudents(cid) {
+      classViewMode = 'students';
+      renderClassTab();
+      const students = myStudents().filter(s => s.courseId === cid);
+      document.getElementById('class-view-body').innerHTML = studentsTableHTML(students);
+    }
+
+    function currentSemAttendance(studentId) {
+      const recs = DB.SemesterRecords.getAll(studentId);
+      const latest = recs[recs.length - 1];
+      return latest && latest.attendance != null ? latest.attendance + '%' : '—';
+    }
+
+    function studentsTableHTML(students) {
+      return `<div class="section-card"><div class="table-wrapper"><table class="data-table">
+        <thead><tr><th>Student</th><th>Class</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${students.map(s => {
+          const course = DB.Courses.getById(s.courseId);
+          return `<tr>
+            <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm')}<span class="font-semibold text-sm">${s.name}</span></div></td>
+            <td class="text-sm">${course?.name || '—'}</td>
+            <td>${currentSemAttendance(s.id)}</td>
+            <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
+            <td><div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm" onclick="viewMenteeFile('${s.id}')">${Icons.fileText} Report</button>
+              <button class="btn btn-secondary btn-sm" onclick="scheduleMeetingFor('${s.id}')" title="Schedule Meeting">${Icons.calendar}</button>
+              <button class="btn btn-secondary btn-sm" onclick="referToHOD('${s.id}')" title="Refer to HOD">${Icons.link}</button>
+              ${s.parentEmail ? (s.parentApproved
+                ? `<button class="btn btn-secondary btn-sm" onclick="setParentApproval('${s.id}',false)"><span class="badge badge-green">${Icons.check} Parent OK</span></button>`
+                : `<button class="btn btn-primary btn-sm" onclick="setParentApproval('${s.id}',true)">Approve Parent</button>`) : ''}
+            </div></td>
+          </tr>`;
+        }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students.</td></tr>'}</tbody>
+      </table></div></div>`;
+    }
+
+    // Refer a student to the HOD
+    function referToHOD(studentId) {
+      const s = DB.Users.getById(studentId);
+      const hod = DB.Users.getAll().find(u => u.role === 'hod' && u.departmentId === session.departmentId);
+      if (!hod) { Toast.warning('No HOD found', 'No HOD is set for your department.'); return; }
+      Modal.create('refer', {
+        title: `Refer ${s.name} to HOD`, size: 'sm',
+        body: `<div class="form-group"><label class="form-label">Reason / note for HOD</label><textarea class="form-textarea" id="refer-note" rows="3" placeholder="e.g. Please speak with this student regarding attendance."></textarea></div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('refer')">Cancel</button><button class="btn btn-primary" onclick="doRefer('${studentId}','${hod.id}')">Send Referral</button>`,
+      });
+    }
+    function doRefer(studentId, hodId) {
+      const s = DB.Users.getById(studentId);
+      const note = document.getElementById('refer-note').value.trim();
+      DB.Notifications.create(hodId, 'Student Referred by Teacher', `${session.name} referred ${s.name}. ${note}`, 'warning');
+      Toast.success('Referred', 'The HOD has been notified.');
+      Modal.close('refer');
+    }
+
+    // Visible parent-approval control (Teacher)
+    function setParentApproval(studentId, approve) {
+      if (approve) DB.ParentLinks.approve(studentId, session.userId);
+      else DB.ParentLinks.revoke(studentId, session.userId);
+      Toast.success(approve ? 'Parent Approved' : 'Access Revoked', approve ? 'Parent can now view the report.' : 'Parent access revoked.');
+      renderClassTab();
+    }
+
+    function toggleSidebar() {
+      const s = document.getElementById('sidebar');
+      if (window.innerWidth <= 768) {
+        s.classList.toggle('mobile-open');
+        document.getElementById('mobile-overlay').classList.toggle('show');
+      } else {
+        s.classList.toggle('collapsed');
+      }
+    }
+
+    function closeMobileSidebar() {
+      document.getElementById('sidebar').classList.remove('mobile-open');
+      document.getElementById('mobile-overlay').classList.remove('show');
+    }
+
+    function updateThemeIcon() {
+      const isDark = Theme.get() === 'dark';
+      document.getElementById('theme-icon-header').innerHTML = isDark ? Icons.sun : Icons.moon;
+    }
+
+    Theme._origToggle = Theme.toggle;
+    Theme.toggle = () => { Theme._origToggle(); updateThemeIcon(); };
+
+    function updateNotifBadge() {
+      const count = DB.Notifications.getUnread(session.userId).length;
+      const badge = document.getElementById('notif-badge');
+      badge.style.display = count > 0 ? 'flex' : 'none';
+      badge.textContent = count;
+    }
+
+    function showNotifications() {
+      const notifs = DB.Notifications.getForUser(session.userId);
+      DB.Notifications.markAllRead(session.userId);
+      updateNotifBadge();
+      Modal.create('notifs', {
+        title: 'Notifications',
+        body: notifs.length ? notifs.map(n => `
+          <div style="padding:var(--space-3) 0;border-bottom:1px solid var(--border-color)">
+            <div style="font-weight:600;font-size:var(--font-size-sm);color:var(--text-primary)">${n.title}</div>
+            <div style="font-size:var(--font-size-xs);color:var(--text-secondary);margin-top:2px">${n.message}</div>
+            <div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${DateFmt.relativeTime(n.createdAt)}</div>
+          </div>`).join('') : '<div class="empty-state"><p>No notifications.</p></div>',
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('notifs')">Close</button>`,
+      });
+    }
+
+    // ── Dashboard ────────────────────────────────────────────────
+    function renderDashboard() {
+      selectedStudentId = null;
+      document.getElementById('breadcrumb-current').textContent = 'Dashboard';
+      const container = document.getElementById('page-content');
+      
+      const studentIds = DB.Assignments.getMentees(session.userId);
+      const students = studentIds.map(id => DB.Users.getById(id)).filter(Boolean);
+
+      const statusStats = { green: 0, yellow: 0, red: 0, gray: 0 };
+      students.forEach(s => {
+        statusStats[DB.Analytics.getStudentStatus(s.id)]++;
+      });
+
+      container.innerHTML = `
+        <div class="page-header">
+          <h1 class="page-title">Mentor Dashboard</h1>
+          <p class="page-subtitle">Welcome back, ${session.name}. Here are your assigned mentees.</p>
+        </div>
+
+        <div class="stats-grid">
+          ${statCard('Total Mentees', students.length, Icons.users, 'linear-gradient(135deg, #4F46E5, #6366F1)')}
+          ${statCard('On Track', statusStats.green, Icons.check_circle, 'linear-gradient(135deg, #059669, #10B981)')}
+          ${statCard('Needs Attention', statusStats.yellow, Icons.info, 'linear-gradient(135deg, #F59E0B, #FBBF24)')}
+          ${statCard('At Risk', statusStats.red, Icons.alert, 'linear-gradient(135deg, #DC2626, #EF4444)')}
+        </div>
+
+        ${(() => {
+          const flagged = students.filter(s => DB.Analytics.getStudentStatus(s.id) !== 'green');
+          if (!flagged.length) return '';
+          return `<div class="section-card mb-6">
+            <div class="section-card-header"><div class="section-card-title">${Icons.alert} Need Attention & At Risk</div></div>
+            <div class="section-card-body" style="padding:0">
+              ${flagged.map(s => {
+                const status = DB.Analytics.getStudentStatus(s.id);
+                const course = DB.Courses.getById(s.courseId);
+                return `<div style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-5);border-bottom:1px solid var(--border-color);cursor:pointer" onclick="viewMenteeFile('${s.id}')">
+                  ${renderAvatar(s.name,'sm')}
+                  <div style="flex:1;min-width:0"><div class="font-semibold text-sm">${s.name}</div><div class="text-xs text-muted">${course?.name || '—'} · Attendance ${currentSemAttendance(s.id)}</div></div>
+                  ${renderStatusBadge(status)}
+                </div>`;
+              }).join('')}
+            </div>
+          </div>`;
+        })()}
+
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">${Icons.book} Courses</div>
+          </div>
+          <div class="section-card-body">
+            <div class="mentee-grid">
+              ${(() => {
+                const byCourse = {};
+                students.forEach(s => { (byCourse[s.courseId] = byCourse[s.courseId] || []).push(s); });
+                const ids = Object.keys(byCourse);
+                if (!ids.length) return `<div class="w-full text-center py-8"><p style="color:var(--text-secondary)">No courses — you have no assigned students yet.</p></div>`;
+                return ids.map(cid => {
+                  const course = DB.Courses.getById(cid);
+                  const cs = byCourse[cid];
+                  const dept = course ? DB.Departments.getById(course.departmentId) : null;
+                  return `<div class="section-card">
+                    <div class="section-card-body">
+                      <div style="display:flex;justify-content:space-between;align-items:start">
+                        <div style="cursor:pointer" onclick="showClassStudents('${cid}')">
+                          <div class="font-semibold">${course?.name || 'Course'}</div>
+                          <div class="text-xs text-muted">${dept?.name || ''} · ${course?.semesterCount || 6} semesters</div>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="showCourseConfig('${cid}')" title="Course Settings">${Icons.settings}</button>
+                      </div>
+                      <hr class="divider">
+                      <div class="flex gap-2">
+                        <span class="badge badge-blue">${cs.length} students</span>
+                        <button class="btn btn-secondary btn-sm" onclick="showClassStudents('${cid}')">View Students</button>
+                      </div>
+                    </div>
+                  </div>`;
+                }).join('');
+              })()}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function statCard(label, value, icon, gradient) {
+      return `<div class="stat-card">
+        <div class="stat-card-icon" style="background:${gradient};color:white">${icon}</div>
+        <div class="stat-card-value">${value}</div>
+        <div class="stat-card-label">${label}</div>
+      </div>`;
+    }
+
+    // ── Mentee File Viewer ────────────────────────────────────────
+    let menteeOrigin = 'dashboard';
+    function viewMenteeFile(studentId) {
+      selectedStudentId = studentId;
+      activeSubTab = 'profile';
+      menteeOrigin = (mentorTab === 'class') ? 'class' : 'dashboard';
+      const student = DB.Users.getById(studentId);
+      document.getElementById('breadcrumb-current').textContent = student.name;
+      renderMenteeFile();
+    }
+
+    function exitMenteeFile() {
+      if (menteeOrigin === 'class') showMentorTab('class');
+      else renderDashboard();
+    }
+
+    function renderMenteeFile() {
+      const container = document.getElementById('page-content');
+      const student = DB.Users.getById(selectedStudentId);
+      const course = DB.Courses.getById(student.courseId);
+
+      container.innerHTML = `
+        <button class="btn btn-secondary btn-sm back-btn" onclick="exitMenteeFile()">${Icons.chevronLeft} ${menteeOrigin === 'class' ? 'Back to Class' : 'Back to Dashboard'}</button>
+        
+        <div class="page-header" style="margin-bottom:var(--space-6)">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
+            <div style="display:flex;align-items:center;gap:var(--space-4)">
+              ${renderAvatar(student.name, 'lg')}
+              <div>
+                <h1 class="page-title">${student.name}</h1>
+                <p class="page-subtitle">${course?.name || '—'} · ${course?.semesterCount || 6} Semesters</p>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary" onclick="PDFGen.generate('${selectedStudentId}')">${Icons.download} Export PDF</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs" style="margin-bottom:var(--space-6)">
+          <button class="tab-btn ${activeSubTab==='profile'?'active':''}" onclick="switchSubTab('profile')">Personal Info</button>
+          <button class="tab-btn ${activeSubTab==='academic'?'active':''}" onclick="switchSubTab('academic')">Academic & Attendance</button>
+          <button class="tab-btn ${activeSubTab==='extracredit'?'active':''}" onclick="switchSubTab('extracredit')">Extra-Credit & Awards</button>
+          <button class="tab-btn ${activeSubTab==='meetings'?'active':''}" onclick="switchSubTab('meetings')">Meetings</button>
+          <button class="tab-btn ${activeSubTab==='qualitative'?'active':''}" onclick="switchSubTab('qualitative')">Qualitative Record</button>
+          <button class="tab-btn ${activeSubTab==='meetingreport'?'active':''}" onclick="switchSubTab('meetingreport')">Meeting Report</button>
+          <button class="tab-btn ${activeSubTab==='datewisereport'?'active':''}" onclick="switchSubTab('datewisereport')">Date wise Report</button>
+        </div>
+
+        <div id="sub-tab-content"></div>`;
+
+      renderSubTabContent();
+    }
+
+    function switchSubTab(tab) {
+      activeSubTab = tab;
+      // Re-render the file view so the correct tab shows as active (robust highlight).
+      renderMenteeFile();
+    }
+
+    function renderSubTabContent() {
+      const subContainer = document.getElementById('sub-tab-content');
+      const student = DB.Users.getById(selectedStudentId);
+      const profile = DB.Profiles.get(selectedStudentId) || {};
+      const course = DB.Courses.getById(student.courseId);
+
+      if (activeSubTab === 'profile') {
+        subContainer.innerHTML = `
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">${Icons.user} Edit Student Profile</div></div>
+            <div class="section-card-body">
+              <form id="profile-form" onsubmit="saveProfile(event)">
+                <div class="profile-section-title">A. Identity & Basic Info</div>
+                <div class="form-grid">
+                  <div class="form-group"><label class="form-label required">Roll No.</label><input type="text" name="rollNo" class="form-input" value="${profile.rollNo || ''}" required></div>
+                  <div class="form-group"><label class="form-label">Class</label><input type="text" name="className" class="form-input" value="${profile.className || ''}" placeholder="e.g. BSc CS A Batch"></div>
+                  <div class="form-group"><label class="form-label">Blood Group</label><input type="text" name="bloodGroup" class="form-input" value="${profile.bloodGroup || ''}"></div>
+                </div>
+
+                <div class="form-grid">
+                  <div class="form-group"><label class="form-label">Religion</label><input type="text" name="religion" class="form-input" value="${profile.religion || ''}"></div>
+                  <div class="form-group"><label class="form-label">Community</label><input type="text" name="community" class="form-input" value="${profile.community || ''}"></div>
+                  <div class="form-group">
+                    <label class="form-label">Accommodation</label>
+                    <select name="residenceType" class="form-select" onchange="toggleHostelFields(this.value)">
+                      <option value="day_scholar" ${profile.residenceType==='day_scholar'?'selected':''}>Day Scholar</option>
+                      <option value="hosteler" ${profile.residenceType==='hosteler'?'selected':''}>Hosteler</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div id="hostel-fields-wrap" style="display:${profile.residenceType==='hosteler'?'block':'none'}">
+                  <div class="form-grid">
+                    <div class="form-group"><label class="form-label">Hostel Name</label><input type="text" name="hostelName" class="form-input" value="${profile.hostelName || ''}"></div>
+                    <div class="form-group"><label class="form-label">Warden Name</label><input type="text" name="wardenName" class="form-input" value="${profile.wardenName || ''}"></div>
+                    <div class="form-group"><label class="form-label">Warden Phone</label><input type="tel" name="wardenPhone" class="form-input" value="${profile.wardenPhone || ''}"></div>
+                  </div>
+                </div>
+
+                <div class="profile-section-title">B. Contact Details</div>
+                <div class="grid-2">
+                  <div class="form-group"><label class="form-label">Permanent Address</label><textarea name="permanentAddress" class="form-textarea">${profile.permanentAddress || ''}</textarea></div>
+                  <div class="form-group"><label class="form-label">Communication Address</label><textarea name="communicationAddress" class="form-textarea">${profile.communicationAddress || ''}</textarea></div>
+                </div>
+                <div class="form-grid">
+                  <div class="form-group"><label class="form-label">Permanent Address Phone</label><input type="tel" name="permanentPhone" class="form-input" value="${profile.permanentPhone || ''}"></div>
+                  <div class="form-group"><label class="form-label">Communication Address Phone</label><input type="tel" name="communicationPhone" class="form-input" value="${profile.communicationPhone || ''}"></div>
+                </div>
+
+                <div class="profile-section-title">C. Family Background</div>
+                <div class="form-grid">
+                  <div class="form-group"><label class="form-label">Father's Name</label><input type="text" name="fatherName" class="form-input" value="${profile.fatherName || ''}"></div>
+                  <div class="form-group"><label class="form-label">Father's Occupation</label><input type="text" name="fatherOccupation" class="form-input" value="${profile.fatherOccupation || ''}"></div>
+                  <div class="form-group"><label class="form-label">Father's Phone</label><input type="tel" name="fatherPhone" class="form-input" value="${profile.fatherPhone || ''}"></div>
+                </div>
+                <div class="form-grid">
+                  <div class="form-group"><label class="form-label">Mother's Name</label><input type="text" name="motherName" class="form-input" value="${profile.motherName || ''}"></div>
+                  <div class="form-group"><label class="form-label">Mother's Occupation</label><input type="text" name="motherOccupation" class="form-input" value="${profile.motherOccupation || ''}"></div>
+                </div>
+
+                <div class="profile-section-title">D. Qualitative Info & Aspirations</div>
+                <div class="form-group"><label class="form-label">Hobbies & Talents</label><input type="text" name="hobbies" class="form-input" value="${profile.hobbies || ''}" placeholder="e.g. Classical Dance, Chess, Guitar"></div>
+                <div class="form-group"><label class="form-label">Life Goal / Ambition</label><input type="text" name="lifeGoal" class="form-input" value="${profile.lifeGoal || ''}" placeholder="e.g. Software Architect, Professor"></div>
+
+                <div class="profile-section-title">E. Entry Qualification Details</div>
+                <div class="form-grid">
+                  <div class="form-group"><label class="form-label">SSLC School Name</label><input type="text" name="sslcSchool" class="form-input" value="${profile.sslcSchool || ''}"></div>
+                  <div class="form-group"><label class="form-label">SSLC Marks/Grade %</label><input type="text" name="sslcPercentage" class="form-input" value="${profile.sslcPercentage || ''}"></div>
+                  <div class="form-group"><label class="form-label">SSLC Grade</label><input type="text" name="sslcGrade" class="form-input" value="${profile.sslcGrade || ''}"></div>
+                </div>
+                <div class="form-grid">
+                  <div class="form-group"><label class="form-label">Plus Two (+2) School Name</label><input type="text" name="plusTwoSchool" class="form-input" value="${profile.plusTwoSchool || ''}"></div>
+                  <div class="form-group"><label class="form-label">Plus Two Marks/Grade %</label><input type="text" name="plusTwoPercentage" class="form-input" value="${profile.plusTwoPercentage || ''}"></div>
+                  <div class="form-group"><label class="form-label">Plus Two Grade</label><input type="text" name="plusTwoGrade" class="form-input" value="${profile.plusTwoGrade || ''}"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Prior Co-curricular Record (before +2)</label><textarea name="priorAchievements" class="form-textarea" placeholder="Arts, sports or other game records…">${profile.priorAchievements || ''}</textarea></div>
+
+                <button type="submit" class="btn btn-primary mt-6">Save Profile Changes</button>
+              </form>
+            </div>
+          </div>`;
+      }
+
+      else if (activeSubTab === 'academic') {
+        const semCount = course ? course.semesterCount : 6;
+        subContainer.innerHTML = `
+          <div class="semester-tabs">
+            ${Array.from({ length: semCount }, (_, i) => `
+              <button class="semester-tab-btn ${currentRecordSemester === i+1 ? 'active' : ''}" onclick="switchRecordSemester(${i+1})">Semester ${i+1}</button>`).join('')}
+          </div>
+          <div id="semester-detail-card"></div>`;
+        renderSemesterDetail();
+      }
+
+      else if (activeSubTab === 'extracredit') {
+        const categories = DB.Settings.getExtraCreditCategories();
+        const extraCreditList = DB.ExtraCredit.getAll(selectedStudentId);
+        const awards = DB.Achievements.getAll(selectedStudentId);
+
+        subContainer.innerHTML = `
+          <div class="section-card mb-6">
+            <div class="section-card-header">
+              <div class="section-card-title">${Icons.award} Extra Credit Courses</div>
+              <button class="btn btn-primary btn-sm" onclick="showAddExtraCreditModal()">${Icons.plus} Add Extra Credit</button>
+            </div>
+            <div class="section-card-body">
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead><tr><th>Sem</th><th>Category</th><th>Course Name</th><th>Provider</th><th>Date</th><th>Action</th></tr></thead>
+                  <tbody>
+                    ${extraCreditList.map(ec => `
+                      <tr>
+                        <td>Sem ${ec.semester}</td>
+                        <td><span class="badge badge-purple">${ec.category}</span></td>
+                        <td><strong>${ec.courseName}</strong></td>
+                        <td>${ec.provider || '—'}</td>
+                        <td>${DateFmt.format(ec.completionDate)}</td>
+                        <td><button class="btn btn-ghost btn-sm btn-icon" onclick="deleteExtraCredit('${ec.id}')">${Icons.trash}</button></td>
+                      </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No extra credit courses recorded.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">${Icons.award} Co-Curricular Awards & Achievements</div>
+              <button class="btn btn-primary btn-sm" onclick="showAddAwardModal()">${Icons.plus} Add Achievement</button>
+            </div>
+            <div class="section-card-body">
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead><tr><th>Sem</th><th>Date</th><th>Achievement Detail</th><th>Category</th><th>Action</th></tr></thead>
+                  <tbody>
+                    ${awards.map(aw => `
+                      <tr>
+                        <td>Sem ${aw.semester}</td>
+                        <td>${DateFmt.format(aw.date)}</td>
+                        <td><strong>${aw.title}</strong></td>
+                        <td><span class="badge badge-cyan">${aw.category}</span></td>
+                        <td><button class="btn btn-ghost btn-sm btn-icon" onclick="deleteAward('${aw.id}')">${Icons.trash}</button></td>
+                      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No achievements recorded yet.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      else if (activeSubTab === 'meetings') {
+        const mentorMeetings = DB.Meetings.getAll(selectedStudentId).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+        const ptaMeetings = DB.PTAMeetings.getAll(selectedStudentId);
+
+        subContainer.innerHTML = `
+          <div class="section-card mb-6">
+            <div class="section-card-header">
+              <div class="section-card-title">${Icons.calendar} Mentor-Mentee Meetings</div>
+              <div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm" onclick="showQuickMeetingModal()">${Icons.plus} Add Meeting Note</button>
+                <button class="btn btn-primary btn-sm" onclick="showAddMeetingModal()">${Icons.plus} Schedule a Meeting</button>
+              </div>
+            </div>
+            <div class="section-card-body">
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead><tr><th>Sem</th><th>Date</th><th>Discussion</th><th>Goals</th><th>Confidential</th><th>Student Confirmed</th><th>Action</th></tr></thead>
+                  <tbody>
+                    ${mentorMeetings.map(m => `
+                      <tr>
+                        <td>Sem ${m.semester}</td>
+                        <td>${DateFmt.format(m.date)}</td>
+                        <td style="white-space:normal;max-width:240px">${Str.escHtml(m.notes || m.discussion || '')}</td>
+                        <td style="white-space:normal;max-width:180px">${Str.escHtml(m.goals || '—')}</td>
+                        <td style="white-space:normal;max-width:180px;color:var(--danger)">${m.confidentialComments ? Str.escHtml(m.confidentialComments) : '—'}</td>
+                        <td>
+                          ${m.studentConfirmed
+                            ? `<span class="badge badge-green">${Icons.check} Confirmed</span>`
+                            : `<span class="badge badge-yellow">Pending</span>`}
+                        </td>
+                        <td><div class="flex gap-1">
+                          <button class="btn btn-ghost btn-sm btn-icon" onclick="updateMeeting('${m.id}')" title="Update details">${Icons.edit}</button>
+                          <button class="btn btn-ghost btn-sm btn-icon" onclick="deleteMeeting('${m.id}')">${Icons.trash}</button>
+                        </div></td>
+                      </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No meetings scheduled.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-card-header">
+              <div class="section-card-title">${Icons.users} Parent (PTA) Meetings</div>
+              <button class="btn btn-primary btn-sm" onclick="showAddPtaModal()">${Icons.plus} Log PTA Meeting</button>
+            </div>
+            <div class="section-card-body">
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead><tr><th>Sem</th><th>Date</th><th>Meeting Notes</th><th>Parent Acknowledged</th><th>Action</th></tr></thead>
+                  <tbody>
+                    ${ptaMeetings.map(m => `
+                      <tr>
+                        <td>Sem ${m.semester}</td>
+                        <td>${DateFmt.format(m.date)}</td>
+                        <td style="white-space:normal;max-width:300px">${m.notes}</td>
+                        <td>
+                          ${m.parentAcknowledged 
+                            ? `<span class="badge badge-green">${Icons.check} Acknowledged</span>` 
+                            : `<span class="badge badge-yellow">Pending</span>`}
+                        </td>
+                        <td><button class="btn btn-ghost btn-sm btn-icon" onclick="deletePtaMeeting('${m.id}')">${Icons.trash}</button></td>
+                      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No PTA meetings logged.</td></tr>'}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>`;
+    }
+
+    else if (activeSubTab === 'qualitative') {
+      const note = DB.MentoringNotes.get(selectedStudentId, currentRecordSemester) || { params: {}, participation: '', remarks: '' };
+      const params = DB.Settings.getQualitativeParameters();
+      // backward-compat: merge any old trait objects into a flat map keyed by label
+      const values = note.params || {};
+
+      subContainer.innerHTML = `
+        <div class="semester-tabs" style="margin-bottom:var(--space-4)">
+          ${Array.from({ length: course ? course.semesterCount : 6 }, (_, i) => `
+            <button class="semester-tab-btn ${currentRecordSemester === i+1 ? 'active' : ''}" onclick="switchRecordSemester(${i+1})">Sem ${i+1}</button>`).join('')}
+        </div>
+
+        <div class="section-card">
+          <div class="section-card-header">
+            <div class="section-card-title">${Icons.fileText} Qualitative Evaluation — Semester ${currentRecordSemester}</div>
+            <button class="btn btn-secondary btn-sm" onclick="manageQualParams()">${Icons.settings} Manage Parameters</button>
+          </div>
+          <div class="section-card-body">
+            <div class="alert alert-info mb-4" style="align-items:center">${Icons.info}<span>All parameters are optional — rate what's relevant. Update after any meeting; nothing is compulsory.</span></div>
+            <form onsubmit="saveQualitative(event)">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--space-4)">
+                ${params.map((label) => {
+                  const esc = Str.escHtml(label).replace(/'/g,"\\'");
+                  const cur = values[label];
+                  return `<div class="qual-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-3)">
+                      <span style="font-weight:600;font-size:var(--font-size-sm)">${Str.escHtml(label)}</span>
+                      <button type="button" onclick="clearParamRating('${esc}', this)" style="border:none;background:none;color:var(--text-tertiary);font-size:11px;cursor:pointer;${cur?'':'visibility:hidden'}">Clear</button>
+                    </div>
+                    <div class="rating-dots qual-rate" data-param="${Str.escHtml(label)}" style="display:flex;gap:6px">
+                      ${[1,2,3,4,5].map(v => `<button type="button" class="rating-dot-btn ${cur===v?'active':''}" onclick="setParamRating('${esc}', ${v}, this)">${v}</button>`).join('')}
+                    </div>
+                  </div>`;
+                }).join('')}
+              </div>
+              <div class="profile-section-title">Participation & Remarks (optional)</div>
+              <div class="grid-2">
+                <div class="form-group"><label class="form-label">Co-curricular Participation</label>
+                  <textarea id="qual-participation" class="form-textarea" rows="4">${note.participation || ''}</textarea></div>
+                <div class="form-group"><label class="form-label">General Observation & Remarks</label>
+                  <textarea id="qual-remarks" class="form-textarea" rows="4">${note.remarks || ''}</textarea></div>
+              </div>
+              <button type="submit" class="btn btn-primary mt-4">Save Qualitative Evaluation</button>
+            </form>
+          </div>
+        </div>`;
+      qualParamRatings = { ...values };
+    }
+
+    else if (activeSubTab === 'meetingreport') {
+      const meetings = DB.Meetings.getAll(selectedStudentId).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      const items = (field) => meetings.map(m => ({ date: m.date, text: (typeof field === 'function' ? field(m) : m[field]) })).filter(x => x.text && String(x.text).trim());
+      const disc = items(m => m.notes || m.discussion);
+      const conf = items('confidentialComments');
+      const list = (arr, cls) => arr.length
+        ? arr.map(x => `<div class="mr-item"><span class="mr-date">${DateFmt.format(x.date)}</span><span class="mr-text">${Str.escHtml(String(x.text))}</span></div>`).join('')
+        : `<div class="mr-empty">Nothing recorded yet.</div>`;
+      // Goals with completion status + review (student requests, mentor approves)
+      const goalItems = meetings.map(m => ({ id: m.id, date: m.date, text: m.goals, done: !!m.goalDone, studentDone: !!m.goalStudentDone })).filter(x => x.text && String(x.text).trim());
+      const goalsHtml = goalItems.length ? goalItems.map(x => {
+        let statusHtml;
+        if (x.done) statusHtml = `<span style="color:#059669;font-weight:700;font-size:12px">✓ Completed</span> <button class="btn btn-ghost btn-sm" onclick="setGoalDone('${x.id}',false)" title="Reopen">Reopen</button>`;
+        else if (x.studentDone) statusHtml = `<span class="badge badge-yellow">Student marked done</span> <button class="btn btn-primary btn-sm" onclick="setGoalDone('${x.id}',true)">Approve &amp; Complete</button>`;
+        else statusHtml = `<span style="color:#DC2626;font-weight:700;font-size:12px">✕ Pending</span> <button class="btn btn-secondary btn-sm" onclick="setGoalDone('${x.id}',true)">Mark Complete</button>`;
+        return `<div class="mr-item">
+          <span class="mr-date">${DateFmt.format(x.date)}</span>
+          <span class="mr-text" style="flex:1">${Str.escHtml(String(x.text))}</span>
+          <span style="white-space:nowrap;display:flex;gap:8px;align-items:center">${statusHtml}</span>
+        </div>`;
+      }).join('') : `<div class="mr-empty">Nothing recorded yet.</div>`;
+      const goalCount = goalItems.length, latest = meetings[0]?.date;
+      subContainer.innerHTML = `
+        <div class="stats-grid" style="margin-bottom:var(--space-5)">
+          ${statCard('Total Meetings', meetings.length, Icons.calendar, 'linear-gradient(135deg,#4F46E5,#6366F1)')}
+          ${statCard('Goals Set', goalCount, Icons.target, 'linear-gradient(135deg,#059669,#10B981)')}
+          ${statCard('Last Meeting', latest ? DateFmt.format(latest) : '—', Icons.check_circle, 'linear-gradient(135deg,#0891B2,#06B6D4)')}
+        </div>
+        <div class="section-card">
+          <div class="section-card-header"><div class="section-card-title">${Icons.fileText} Overall Report</div></div>
+          <div class="section-card-body">
+            ${meetings.length ? `
+              <div class="mr-block mr-goals"><h4>${Icons.target} Goals</h4>${goalsHtml}</div>
+              <div class="mr-block mr-disc"><h4>${Icons.message} Discussion &amp; Comments</h4>${list(disc)}</div>
+              <div class="mr-block mr-conf"><h4>${Icons.key} Confidential — Staff Only</h4>${list(conf)}</div>
+            ` : '<div class="empty-state" style="padding:var(--space-8)"><p>No meetings recorded yet.</p></div>'}
+          </div>
+        </div>`;
+    }
+
+    else if (activeSubTab === 'datewisereport') {
+      const meetings = DB.Meetings.getAll(selectedStudentId).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      subContainer.innerHTML = `
+        <div class="section-card">
+          <div class="section-card-header"><div class="section-card-title">${Icons.calendar} Date-wise Report (latest first)</div></div>
+          <div class="section-card-body" style="padding:0"><div class="table-wrapper"><table class="data-table">
+            <thead><tr><th>Date</th><th>Sem</th><th>Discussion</th><th>Goals</th><th>Comments</th><th>Confidential</th></tr></thead>
+            <tbody>${meetings.map(m=>`<tr>
+              <td>${DateFmt.format(m.date)}</td><td>Sem ${m.semester}</td>
+              <td style="white-space:normal;max-width:200px">${Str.escHtml(m.notes||m.discussion||'—')}</td>
+              <td style="white-space:normal;max-width:160px">${Str.escHtml(m.goals||'—')}</td>
+              <td style="white-space:normal;max-width:160px">${Str.escHtml(m.comments||'—')}</td>
+              <td style="white-space:normal;max-width:160px;color:var(--danger)">${Str.escHtml(m.confidentialComments||'—')}</td>
+            </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary)">No meetings.</td></tr>'}</tbody>
+          </table></div></div>
+        </div>`;
+    }
+
+  }
+
+  // ── Custom qualitative parameters (configurable, all optional) ──
+  let qualParamRatings = {};
+  function setParamRating(label, v, btn) {
+    qualParamRatings[label] = v;
+    const card = btn.closest('.qual-card');
+    card.querySelectorAll('.rating-dot-btn').forEach((b, idx) => b.classList.toggle('active', idx < v));
+    const clearBtn = card.querySelector('button[onclick^="clearParamRating"]');
+    if (clearBtn) clearBtn.style.visibility = 'visible';
+  }
+  function clearParamRating(label, btn) {
+    delete qualParamRatings[label];
+    const card = btn.closest('.qual-card');
+    card.querySelectorAll('.rating-dot-btn').forEach(b => b.classList.remove('active'));
+    btn.style.visibility = 'hidden';
+  }
+  function manageQualParams() {
+    const params = DB.Settings.getQualitativeParameters();
+    Modal.create('qparams', {
+      title: 'Manage Qualitative Parameters', size: 'sm',
+      body: `<p class="text-xs text-muted mb-3">One parameter per line. HOD/Teacher can change these; all are optional to fill.</p>
+             <textarea class="form-textarea" id="qp-list" rows="10">${params.join('\n')}</textarea>`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('qparams')">Cancel</button>
+               <button class="btn btn-primary" onclick="saveQualParams()">Save Parameters</button>`,
+    });
+  }
+  function saveQualParams() {
+    const list = document.getElementById('qp-list').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    DB.Settings.set({ qualitativeParameters: list });
+    Toast.success('Saved', 'Parameters updated.');
+    Modal.close('qparams');
+    renderSubTabContent();
+  }
+
+  // Mentor completes / reopens a goal (final review). Closes only after mentor approves.
+  function setGoalDone(id, done) {
+    DB.Meetings.update(id, { goalDone: done }, session.userId);
+    if (done) {
+      const m = DB.Meetings.getAll(selectedStudentId).find(x => x.id === id);
+      DB.Notifications.create(selectedStudentId, 'Goal Completed', `Your mentor marked a goal as completed: "${(m?.goals||'').slice(0,60)}"`, 'success');
+    }
+    Toast.success(done ? 'Goal Completed' : 'Goal Reopened');
+    renderSubTabContent();
+  }
+
+  function toggleHostelFields(val) {
+    document.getElementById('hostel-fields-wrap').style.display = val === 'hosteler' ? 'block' : 'none';
+  }
+
+  // ── Profile Save ──────────────────────────────────────────────
+  function saveProfile(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    DB.Profiles.save(selectedStudentId, data, session.userId);
+    Toast.success('Profile Saved', 'Personal information has been updated successfully.');
+  }
+
+  // ── Semester Detail (Academic/Attendance) ─────────────────────
+  function switchRecordSemester(sem) {
+    currentRecordSemester = sem;
+    if (activeSubTab === 'academic') renderSemesterDetail();
+    else if (activeSubTab === 'qualitative') renderSubTabContent();
+  }
+
+  function renderSemesterDetail() {
+    const detailContainer = document.getElementById('semester-detail-card');
+    const record = DB.SemesterRecords.get(selectedStudentId, currentRecordSemester) || { gradePoint: '', grade: '', remarks: '', attendance: '' };
+    
+    detailContainer.innerHTML = `
+      <div class="section-card">
+        <div class="section-card-header"><div class="section-card-title">Academic & Attendance — Semester ${currentRecordSemester}</div></div>
+        <div class="section-card-body">
+          <form onsubmit="saveSemesterRecord(event)">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label required">SGPA / Grade Point</label>
+                <input type="number" step="0.01" min="0" max="10" name="gradePoint" class="form-input" value="${record.gradePoint || ''}" placeholder="e.g. 8.45" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label required">Letter Grade</label>
+                <input type="text" name="grade" class="form-input" value="${record.grade || ''}" placeholder="e.g. A+ or O" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label required">Attendance Percentage (%)</label>
+                <input type="number" step="0.1" min="0" max="100" name="attendance" class="form-input" value="${record.attendance || ''}" placeholder="e.g. 92.4" required>
+                <div class="form-hint">Values below 75% will trigger a warning alert.</div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Academic Remarks</label>
+              <textarea name="remarks" class="form-textarea" rows="3" placeholder="Enter semester-specific feedback...">${record.remarks || ''}</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">Save Semester Record</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="section-card mt-6">
+        <div class="section-card-header">
+          <div class="section-card-title">${Icons.fileText} Subject-wise Report — Semester ${currentRecordSemester}</div>
+          <div class="flex gap-2">
+            <button class="btn btn-secondary btn-sm" onclick="showRiskConfig()" title="Change internals / components">${Icons.settings} Components</button>
+            <button class="btn btn-secondary btn-sm" onclick="addSubjectRow()">${Icons.plus} Add Subject</button>
+          </div>
+        </div>
+        <div class="section-card-body" style="padding:0">
+          <div class="table-wrapper"><table class="data-table" id="subjects-table">
+            <thead><tr><th>Subject</th><th>Attendance %</th>${componentColumns().map(c=>`<th>${Str.escHtml(c)}</th>`).join('')}<th>External</th><th>Grade</th><th></th></tr></thead>
+            <tbody id="subjects-tbody">
+              ${(record.subjects || []).map(su => subjectRowHTML(su)).join('') || ''}
+            </tbody>
+          </table></div>
+          <div style="padding:var(--space-4)"><button class="btn btn-primary btn-sm" onclick="saveSubjects()">Save Subject-wise Report</button></div>
+        </div>
+      </div>`;
+  }
+
+  // Component columns come from the course config: N internals + other components
+  function componentColumns() {
+    const student = DB.Users.getById(selectedStudentId);
+    const cfg = DB.CourseConfig.get(student?.courseId);
+    const internals = Array.from({ length: cfg.numInternals || 1 }, (_, i) => `Internal ${i + 1}`);
+    const others = (cfg.components || []).filter(c => !/^internal/i.test(c));
+    return [...internals, ...others];
+  }
+
+  function subjectRowHTML(su = {}) {
+    const cols = componentColumns();
+    const marks = { ...(su.marks || {}) };
+    if (su.internal != null && su.internal !== '' && marks['Internal 1'] == null) marks['Internal 1'] = su.internal;
+    return `<tr>
+      <td><input class="form-input" data-f="name" value="${su.name ? Str.escHtml(su.name) : ''}" placeholder="Subject"></td>
+      <td><input class="form-input" type="number" data-f="attendance" value="${su.attendance ?? ''}" style="max-width:90px"></td>
+      ${cols.map(c => `<td><input class="form-input" type="number" data-comp="${Str.escHtml(c)}" value="${marks[c] ?? ''}" style="max-width:90px"></td>`).join('')}
+      <td><input class="form-input" type="number" data-f="external" value="${su.external ?? ''}" style="max-width:90px"></td>
+      <td><input class="form-input" data-f="grade" value="${su.grade ? Str.escHtml(su.grade) : ''}" style="max-width:80px"></td>
+      <td><button class="btn btn-ghost btn-sm btn-icon" onclick="this.closest('tr').remove()">${Icons.trash}</button></td>
+    </tr>`;
+  }
+  function addSubjectRow() {
+    document.getElementById('subjects-tbody').insertAdjacentHTML('beforeend', subjectRowHTML());
+  }
+  function saveSubjects() {
+    const rows = [...document.querySelectorAll('#subjects-tbody tr')];
+    const subjects = rows.map(tr => {
+      const g = f => tr.querySelector(`[data-f="${f}"]`).value.trim();
+      const marks = {};
+      tr.querySelectorAll('[data-comp]').forEach(inp => { if (inp.value.trim() !== '') marks[inp.dataset.comp] = inp.value.trim(); });
+      const internal = marks['Internal 1'] ?? ''; // keep flat value for read-only views
+      return { name: g('name'), attendance: g('attendance'), marks, internal, external: g('external'), grade: g('grade') };
+    }).filter(s => s.name);
+    const rec = DB.SemesterRecords.get(selectedStudentId, currentRecordSemester) || {};
+    DB.SemesterRecords.save(selectedStudentId, currentRecordSemester, { ...rec, subjects }, session.userId);
+    Toast.success('Saved', 'Subject-wise report updated.');
+  }
+
+  function saveSemesterRecord(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const data = Object.fromEntries(fd.entries());
+    
+    DB.SemesterRecords.save(selectedStudentId, currentRecordSemester, data, session.userId);
+    
+    // Check if at-risk (attendance alert)
+    if (parseFloat(data.attendance) < 75) {
+      const student = DB.Users.getById(selectedStudentId);
+      DB.Notifications.create(session.userId, 'Low Attendance Alert', `${student.name}'s attendance fell to ${data.attendance}% in Sem ${currentRecordSemester}`, 'warning');
+      updateNotifBadge();
+    }
+
+    Toast.success('Record Saved', `Semester ${currentRecordSemester} academic data updated.`);
+  }
+
+  // ── Extra Credit Modals & Actions ─────────────────────────────
+  function showAddExtraCreditModal() {
+    const student = DB.Users.getById(selectedStudentId);
+    const course = DB.Courses.getById(student.courseId);
+    const categories = DB.Settings.getExtraCreditCategories();
+
+    Modal.create('add-ec', {
+      title: 'Add Extra Credit Course',
+      body: `
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label required">Semester</label>
+            <select class="form-select" id="ec-sem">
+              ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label required">Category</label>
+            <select class="form-select" id="ec-cat">
+              ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label class="form-label required">Course Name</label><input type="text" class="form-input" id="ec-name" placeholder="e.g. Intro to ML"></div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Provider/Institution</label><input type="text" class="form-input" id="ec-prov" placeholder="e.g. NPTEL / Swayam"></div>
+          <div class="form-group"><label class="form-label required">Completion Date</label><input type="date" class="form-input" id="ec-date" value="${DateFmt.today()}"></div>
+        </div>`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('add-ec')">Cancel</button>
+               <button class="btn btn-primary" onclick="saveExtraCredit()">Add Course</button>`,
+    });
+  }
+
+  function saveExtraCredit() {
+    const sem = parseInt(document.getElementById('ec-sem').value);
+    const cat = document.getElementById('ec-cat').value;
+    const name = document.getElementById('ec-name').value.trim();
+    const prov = document.getElementById('ec-prov').value.trim();
+    const date = document.getElementById('ec-date').value;
+
+    if (!name || !date) { Toast.error('Missing Fields'); return; }
+
+    DB.ExtraCredit.create({ studentId: selectedStudentId, semester: sem, category: cat, courseName: name, provider: prov, completionDate: date }, session.userId);
+    Toast.success('Added', 'Extra credit course added to records.');
+    Modal.close('add-ec');
+    renderSubTabContent();
+  }
+
+  function deleteExtraCredit(id) {
+    Modal.confirm({ title: 'Delete Entry', message: 'Delete this extra credit course entry?', confirmText: 'Delete', onConfirm: () => {
+      DB.ExtraCredit.delete(id, session.userId);
+      Toast.success('Deleted');
+      renderSubTabContent();
+    }});
+  }
+
+  // ── Co-Curricular achievements ────────────────────────────────
+  function showAddAwardModal() {
+    const student = DB.Users.getById(selectedStudentId);
+    const course = DB.Courses.getById(student.courseId);
+    const categories = DB.Settings.getAchievementCategories();
+
+    Modal.create('add-award', {
+      title: 'Add Award / Achievement',
+      body: `
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label required">Semester</label>
+            <select class="form-select" id="aw-sem">
+              ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label required">Category</label>
+            <select class="form-select" id="aw-cat">
+              ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="form-group"><label class="form-label required">Achievement / Award Detail</label><input type="text" class="form-input" id="aw-title" placeholder="e.g. 1st Place in Inter-college Debate competition"></div>
+        <div class="form-group"><label class="form-label required">Date Achieved</label><input type="date" class="form-input" id="aw-date" value="${DateFmt.today()}"></div>`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('add-award')">Cancel</button>
+               <button class="btn btn-primary" onclick="saveAward()">Add Achievement</button>`,
+    });
+  }
+
+  function saveAward() {
+    const sem = parseInt(document.getElementById('aw-sem').value);
+    const cat = document.getElementById('aw-cat').value;
+    const title = document.getElementById('aw-title').value.trim();
+    const date = document.getElementById('aw-date').value;
+
+    if (!title || !date) { Toast.error('Missing fields'); return; }
+
+    DB.Achievements.create({ studentId: selectedStudentId, semester: sem, category: cat, title, date }, session.userId);
+    Toast.success('Added', 'Achievement has been saved.');
+    Modal.close('add-award');
+    renderSubTabContent();
+  }
+
+  function deleteAward(id) {
+    Modal.confirm({ title: 'Delete Entry', message: 'Delete this achievement entry?', confirmText: 'Delete', onConfirm: () => {
+      DB.Achievements.delete(id, session.userId);
+      Toast.success('Deleted');
+      renderSubTabContent();
+    }});
+  }
+
+  // ── Meetings Modals ───────────────────────────────────────────
+  function scheduleMeetingFor(studentId) {
+    selectedStudentId = studentId;
+    showAddMeetingModal();
+  }
+
+  function meetingFormBody(course, m = {}) {
+    return `
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Semester</label>
+          <select class="form-select" id="m-sem">${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}" ${m.semester===i+1?'selected':''}>Semester ${i+1}</option>`).join('')}</select>
+        </div>
+        <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="m-date" value="${m.date || DateFmt.today()}"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Discussion</label><textarea class="form-textarea" id="m-notes" rows="2">${m.notes ? Str.escHtml(m.notes) : ''}</textarea></div>
+      <div class="form-group"><label class="form-label">Goals</label><textarea class="form-textarea" id="m-goals" rows="2">${m.goals ? Str.escHtml(m.goals) : ''}</textarea></div>
+      <div class="form-group"><label class="form-label">Comments</label><textarea class="form-textarea" id="m-comments" rows="2">${m.comments ? Str.escHtml(m.comments) : ''}</textarea></div>
+      <div class="form-group"><label class="form-label">Confidential Comments</label><textarea class="form-textarea" id="m-conf" rows="2">${m.confidentialComments ? Str.escHtml(m.confidentialComments) : ''}</textarea>
+        <div class="form-hint">Staff only (Teacher/HOD/Principal). Never shown to student or parent.</div></div>
+      <div class="form-group"><label class="form-label">My Discussion Points (private to me)</label><textarea class="form-textarea" id="m-tpoints" rows="2" placeholder="Only you can see these — your agenda/topics">${m.discussionPointsTeacher ? Str.escHtml(m.discussionPointsTeacher) : ''}</textarea>
+        <div class="form-hint">Private to you (the teacher). Not visible to the student.</div></div>`;
+  }
+
+  // Quick meeting note — for when a student walks in / meets and shares something
+  function showQuickMeetingModal() {
+    const course = DB.Courses.getById(DB.Users.getById(selectedStudentId).courseId);
+    Modal.create('quick-meeting', {
+      title: 'Add Meeting Note',
+      body: `
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Semester</label>
+            <select class="form-select" id="qm-sem">${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}</select></div>
+          <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="qm-date" value="${DateFmt.today()}"></div>
+        </div>
+        <div class="form-group"><label class="form-label">Discussion</label><textarea class="form-textarea" id="qm-notes" rows="2" placeholder="What the student shared / was discussed..."></textarea></div>
+        <div class="form-group"><label class="form-label">Goals</label><textarea class="form-textarea" id="qm-goals" rows="2"></textarea></div>
+        <div class="form-group"><label class="form-label">Comments</label><textarea class="form-textarea" id="qm-comments" rows="2"></textarea></div>`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('quick-meeting')">Cancel</button>
+               <button class="btn btn-primary" onclick="saveQuickMeeting()">Save Note</button>`,
+    });
+  }
+  function saveQuickMeeting() {
+    const data = {
+      semester: parseInt(document.getElementById('qm-sem').value),
+      date: document.getElementById('qm-date').value || DateFmt.today(),
+      notes: document.getElementById('qm-notes').value.trim(),
+      goals: document.getElementById('qm-goals').value.trim(),
+      comments: document.getElementById('qm-comments').value.trim(),
+    };
+    DB.Meetings.create({ mentorId: session.userId, studentId: selectedStudentId, ...data, type: 'note', status: 'held', studentConfirmed: true }, session.userId);
+    Toast.success('Saved', 'Meeting note added.');
+    Modal.close('quick-meeting');
+    renderSubTabContent();
+  }
+
+  function showAddMeetingModal() {
+    const student = DB.Users.getById(selectedStudentId);
+    const course = DB.Courses.getById(student.courseId);
+    Modal.create('add-meeting', {
+      title: 'Schedule a Meeting',
+      body: meetingFormBody(course) + `<div class="alert alert-info">${Icons.info} The student will be emailed & notified by you (${session.name}).</div>`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('add-meeting')">Cancel</button>
+               <button class="btn btn-primary" onclick="saveMeeting()">Schedule Meeting</button>`,
+    });
+  }
+
+  function readMeetingForm() {
+    return {
+      semester: parseInt(document.getElementById('m-sem').value),
+      date: document.getElementById('m-date').value,
+      notes: document.getElementById('m-notes').value.trim(),
+      goals: document.getElementById('m-goals').value.trim(),
+      comments: document.getElementById('m-comments').value.trim(),
+      confidentialComments: document.getElementById('m-conf').value.trim(),
+      discussionPointsTeacher: document.getElementById('m-tpoints').value.trim(),
+    };
+  }
+
+  function saveMeeting() {
+    const d = readMeetingForm();
+    d.date = d.date || DateFmt.today(); // all fields optional
+    DB.Meetings.create({ mentorId: session.userId, studentId: selectedStudentId, ...d, scheduledBy: session.userId, scheduledByRole: session.role, studentConfirmed: false }, session.userId);
+    DB.Notifications.create(selectedStudentId, 'Meeting Scheduled', `${session.name} scheduled a meeting on ${DateFmt.format(d.date)}. Please review and confirm.`, 'info');
+    const student = DB.Users.getById(selectedStudentId);
+    console.info(`[EMAIL] From ${session.email} to ${student?.email}: Meeting on ${DateFmt.format(d.date)} — ${d.notes}`);
+    Toast.success('Scheduled', 'Meeting scheduled and student notified.');
+    Modal.close('add-meeting');
+    if (document.getElementById('sub-tab-content')) renderSubTabContent();
+  }
+
+  function updateMeeting(id) {
+    const m = DB.Meetings.getAll(selectedStudentId).find(x => x.id === id);
+    if (!m) return;
+    const course = DB.Courses.getById(DB.Users.getById(selectedStudentId).courseId);
+    Modal.create('edit-meeting', {
+      title: 'Update Meeting Details',
+      body: meetingFormBody(course, m),
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-meeting')">Cancel</button>
+               <button class="btn btn-primary" onclick="doUpdateMeeting('${id}')">Save Changes</button>`,
+    });
+  }
+  function doUpdateMeeting(id) {
+    const d = readMeetingForm();
+    d.date = d.date || DateFmt.today();
+    DB.Meetings.update(id, d, session.userId);
+    Toast.success('Updated', 'Meeting details updated.');
+    Modal.close('edit-meeting');
+    renderSubTabContent();
+  }
+
+  // ── Per-course settings ──────────────────────────────────────
+  function showCourseConfig(courseId) {
+    const course = DB.Courses.getById(courseId);
+    const cfg = DB.CourseConfig.get(courseId);
+    const rc = DB.RiskConfig.get();
+    const otherComps = (cfg.components || []).filter(x => !/^internal/i.test(x));
+    Modal.create('course-cfg', {
+      title: `Course Settings — ${course?.name || ''}`, size: 'md',
+      body: `
+        <div class="form-label mb-2">Assessment Components</div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">No. of Internals</label><input type="number" class="form-input" id="cco-int" value="${cfg.numInternals}" min="1" max="6"></div>
+          <div class="form-group"><label class="form-label">Min Attendance %</label><input type="number" class="form-input" id="cco-att" value="${cfg.minAttendancePct}"></div>
+          <div class="form-group"><label class="form-label">Other Components</label><input type="text" class="form-input" id="cco-comp" value="${otherComps.join(', ')}" placeholder="Assignment, Seminar"></div>
+        </div>
+        <hr class="divider">
+        <div class="form-label mb-2">At-Risk / Need-Attention thresholds (college-wide)</div>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">At-Risk Attendance %</label><input type="number" class="form-input" id="cco-ratt" value="${rc.minAttendancePct}"></div>
+          <div class="form-group"><label class="form-label">Attention Attendance %</label><input type="number" class="form-input" id="cco-attn" value="${rc.attentionAttendancePct}"></div>
+          <div class="form-group"><label class="form-label">Min Internal Mark</label><input type="number" class="form-input" id="cco-mark" value="${rc.minInternalMark}"></div>
+          <div class="form-group"><label class="form-label">Max Internals Failed</label><input type="number" class="form-input" id="cco-fail" value="${rc.maxInternalsFailed}"></div>
+        </div>`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('course-cfg')">Cancel</button>
+               <button class="btn btn-primary" onclick="saveCourseConfig('${courseId}')">Save</button>`,
+    });
+  }
+  function saveCourseConfig(courseId) {
+    const num = parseInt(document.getElementById('cco-int').value) || 1;
+    const others = (document.getElementById('cco-comp').value || '').split(',').map(s=>s.trim()).filter(Boolean);
+    const components = [...Array.from({length:num},(_,i)=>`Internal ${i+1}`), ...others];
+    DB.CourseConfig.save(courseId, { numInternals: num, minAttendancePct: parseFloat(document.getElementById('cco-att').value), components }, session.userId);
+    DB.RiskConfig.save({
+      minAttendancePct: parseFloat(document.getElementById('cco-ratt').value),
+      attentionAttendancePct: parseFloat(document.getElementById('cco-attn').value),
+      minInternalMark: parseFloat(document.getElementById('cco-mark').value),
+      maxInternalsFailed: parseInt(document.getElementById('cco-fail').value),
+    }, session.userId);
+    Toast.success('Saved', 'Course settings updated.');
+    Modal.close('course-cfg');
+  }
+
+  // ── Course details & at-risk logic settings (Teacher & HOD) ──
+  function showRiskConfig() {
+    const rc = DB.RiskConfig.get();
+    const myCourses = [...new Set(myStudents().map(s => s.courseId))].map(id => DB.Courses.getById(id)).filter(Boolean);
+    Modal.create('risk-cfg', {
+      title: 'At-Risk Logic & Course Details', size: 'md',
+      body: `
+        <p class="text-sm text-muted mb-4">Set the thresholds that flag a student as <strong>Need Attention</strong> or <strong>At Risk</strong>.</p>
+        <div class="form-grid">
+          <div class="form-group"><label class="form-label">Minimum Attendance %</label><input type="number" class="form-input" id="rc-att" value="${rc.minAttendancePct}"></div>
+          <div class="form-group"><label class="form-label">Attention Attendance %</label><input type="number" class="form-input" id="rc-attn" value="${rc.attentionAttendancePct}"></div>
+          <div class="form-group"><label class="form-label">Minimum Internal Mark</label><input type="number" class="form-input" id="rc-mark" value="${rc.minInternalMark}"></div>
+          <div class="form-group"><label class="form-label">Max Internals Failed</label><input type="number" class="form-input" id="rc-fail" value="${rc.maxInternalsFailed}"></div>
+        </div>
+        <hr class="divider">
+        <div class="form-label mb-2">Course Details (No. of internals, components)</div>
+        ${myCourses.map(c => {
+          const cfg = DB.CourseConfig.get(c.id);
+          const otherComps = (cfg.components || []).filter(x => !/^internal/i.test(x));
+          return `<div style="border:1px solid var(--border-color);border-radius:var(--border-radius-md);padding:var(--space-3);margin-bottom:var(--space-3)">
+            <div class="font-semibold text-sm mb-2">${c.name}</div>
+            <div class="form-grid" style="align-items:end">
+              <div class="form-group"><label class="form-label">No. of Internals</label><input type="number" class="form-input" id="cc-int-${c.id}" value="${cfg.numInternals}" min="1" max="6"></div>
+              <div class="form-group"><label class="form-label">Min Attendance %</label><input type="number" class="form-input" id="cc-att-${c.id}" value="${cfg.minAttendancePct}"></div>
+              <div class="form-group"><label class="form-label">Other Components (comma-separated)</label><input type="text" class="form-input" id="cc-comp-${c.id}" value="${otherComps.join(', ')}" placeholder="Assignment, Seminar"></div>
+            </div>
+          </div>`;
+        }).join('') || '<p class="text-xs text-muted">No classes assigned.</p>'}`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('risk-cfg')">Cancel</button><button class="btn btn-primary" onclick="saveRiskConfig()">Save</button>`,
+    });
+    window._rcCourseIds = myCourses.map(c => c.id);
+  }
+  function saveRiskConfig() {
+    DB.RiskConfig.save({
+      minAttendancePct: parseFloat(document.getElementById('rc-att').value),
+      attentionAttendancePct: parseFloat(document.getElementById('rc-attn').value),
+      minInternalMark: parseFloat(document.getElementById('rc-mark').value),
+      maxInternalsFailed: parseInt(document.getElementById('rc-fail').value),
+    }, session.userId);
+    (window._rcCourseIds || []).forEach(id => {
+      const num = parseInt(document.getElementById('cc-int-'+id).value) || 1;
+      const others = (document.getElementById('cc-comp-'+id)?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
+      const components = [...Array.from({length:num},(_,i)=>`Internal ${i+1}`), ...others];
+      DB.CourseConfig.save(id, { numInternals: num, minAttendancePct: parseFloat(document.getElementById('cc-att-'+id).value), components }, session.userId);
+    });
+    Toast.success('Saved', 'Risk logic and course details updated.');
+    Modal.close('risk-cfg');
+  }
+
+  function deleteMeeting(id) {
+    Modal.confirm({ title: 'Delete Log', message: 'Delete this meeting entry?', confirmText: 'Delete', onConfirm: () => {
+      DB.Meetings.delete(id, session.userId);
+      Toast.success('Deleted');
+      renderSubTabContent();
+    }});
+  }
+
+  // ── PTA Meetings ──────────────────────────────────────────────
+  function showAddPtaModal() {
+    const student = DB.Users.getById(selectedStudentId);
+    const course = DB.Courses.getById(student.courseId);
+
+    Modal.create('add-pta', {
+      title: 'Log PTA / Parent Meeting',
+      body: `
+        <div class="form-grid">
+          <div class="form-group">
+            <label class="form-label required">Semester</label>
+            <select class="form-select" id="p-sem">
+              ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label required">Date</label><input type="date" class="form-input" id="p-date" value="${DateFmt.today()}"></div>
+        </div>
+        <div class="form-group"><label class="form-label required">Discussion Notes & Concerns</label><textarea class="form-textarea" id="p-notes" rows="4" placeholder="Enter notes discussed with parents..."></textarea></div>`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('add-pta')">Cancel</button>
+               <button class="btn btn-primary" onclick="savePtaMeeting()">Log PTA Meeting</button>`,
+    });
+  }
+
+  function savePtaMeeting() {
+    const sem = parseInt(document.getElementById('p-sem').value);
+    const date = document.getElementById('p-date').value;
+    const notes = document.getElementById('p-notes').value.trim();
+
+    if (!notes || !date) { Toast.error('Missing fields'); return; }
+
+    DB.PTAMeetings.create({ studentId: selectedStudentId, semester: sem, date, notes, parentAcknowledged: false }, session.userId);
+    
+    // Notify parent if parent account exists
+    const student = DB.Users.getById(selectedStudentId);
+    if (student.parentEmail) {
+      const parent = DB.Users.getAll().find(u => u.email === student.parentEmail);
+      if (parent) {
+        DB.Notifications.create(parent.id, 'PTA Meeting Acknowledgment Needed', `A PTA meeting was recorded on ${DateFmt.format(date)}. Please click to review and sign/acknowledge.`, 'warning');
+      }
+    }
+
+    Toast.success('Logged', 'PTA meeting logged.');
+    Modal.close('add-pta');
+    renderSubTabContent();
+  }
+
+  function deletePtaMeeting(id) {
+    Modal.confirm({ title: 'Delete Log', message: 'Delete this PTA meeting entry?', confirmText: 'Delete', onConfirm: () => {
+      DB.PTAMeetings.delete(id, session.userId);
+      Toast.success('Deleted');
+      renderSubTabContent();
+    }});
+  }
+
+  // ── Qualitative Eval Rating Helpers ───────────────────────────
+  let traitRatings = { personality: {}, scholar: {} };
+
+  function setRating(traitKey, score, btn) {
+    const [type, key] = traitKey.split('-');
+    traitRatings[type][key] = score;
+
+    const parent = btn.closest('.rating-dots');
+    parent.querySelectorAll('.rating-dot-btn').forEach((b, idx) => {
+      b.classList.toggle('active', idx < score);
+    });
+  }
+
+  function saveQualitative(e) {
+    e.preventDefault();
+    const participation = document.getElementById('qual-participation').value;
+    const remarks = document.getElementById('qual-remarks').value;
+
+    DB.MentoringNotes.save(selectedStudentId, currentRecordSemester, {
+      params: { ...qualParamRatings },
+      participation,
+      remarks
+    }, session.userId);
+
+    Toast.success('Saved', 'Qualitative records updated.');
+  }
+
+  </script>
+</body>
+</html>
