@@ -49,6 +49,65 @@ const DB = (() => {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
 
+  // ── Supabase backend (optional) ──────────────────────────────
+  // When window.SB_CONFIG has url + anonKey and the supabase-js CDN
+  // is loaded, the app hydrates from Supabase on init and writes
+  // changes through to it. Otherwise it stays on localStorage only.
+  const SB = (() => {
+    const cfg = (typeof window !== 'undefined' && window.SB_CONFIG) || {};
+    const enabled = !!(cfg.url && cfg.anonKey && typeof window !== 'undefined' && window.supabase);
+    const client = enabled ? window.supabase.createClient(cfg.url, cfg.anonKey) : null;
+    const TABLE = {
+      [KEYS.departments]: 'departments', [KEYS.courses]: 'courses', [KEYS.classes]: 'classes',
+      [KEYS.users]: 'users', [KEYS.mentorAssignments]: 'mentor_assignments',
+      [KEYS.studentProfiles]: 'student_profiles', [KEYS.semesterRecords]: 'semester_records',
+      [KEYS.extraCreditCourses]: 'extra_credit_courses', [KEYS.achievements]: 'achievements',
+      [KEYS.mentorMeetings]: 'mentor_meetings', [KEYS.ptaMeetings]: 'pta_meetings',
+      [KEYS.progressionRecords]: 'progression_records', [KEYS.mentoringNotes]: 'mentoring_notes',
+      [KEYS.signatures]: 'signatures', [KEYS.notifications]: 'notifications',
+      [KEYS.customFields]: 'custom_fields',
+      // NOTE: audit_log, invite_tokens, password_resets and per-user
+      // goals/wellbeing stay local-only in this first phase.
+    };
+    const tableFor = (key) => TABLE[key] || null;
+    async function hydrate() {
+      if (!enabled) return false;
+      let hasUsers = false;
+      for (const key of Object.keys(TABLE)) {
+        try {
+          const { data, error } = await client.from(TABLE[key]).select('id,data');
+          if (error) { console.warn('[SB] load', TABLE[key], error.message); continue; }
+          const arr = (data || []).map(r => ({ ...r.data, id: r.id }));
+          localStorage.setItem(key, JSON.stringify(arr));
+          if (key === KEYS.users && arr.length) hasUsers = true;
+        } catch (e) { console.warn('[SB] hydrate', TABLE[key], e); }
+      }
+      try {
+        const { data } = await client.from('settings').select('data').eq('id', 1).maybeSingle();
+        if (data && data.data) localStorage.setItem(KEYS.settings, JSON.stringify(data.data));
+      } catch (e) { /* ignore */ }
+      return hasUsers;
+    }
+    function upsertRow(key, item) {
+      const t = tableFor(key);
+      if (!enabled || !t || !item || !item.id) return;
+      client.from(t).upsert({ id: item.id, data: item, updated_at: new Date().toISOString() })
+        .then(({ error }) => { if (error) console.warn('[SB] upsert', t, error.message); });
+    }
+    function deleteRow(key, id) {
+      const t = tableFor(key);
+      if (!enabled || !t) return;
+      client.from(t).delete().eq('id', id)
+        .then(({ error }) => { if (error) console.warn('[SB] delete', t, error.message); });
+    }
+    function saveSettings(obj) {
+      if (!enabled) return;
+      client.from('settings').upsert({ id: 1, data: obj })
+        .then(({ error }) => { if (error) console.warn('[SB] settings', error.message); });
+    }
+    return { enabled, hydrate, upsertRow, deleteRow, saveSettings };
+  })();
+
   // ── Audit log ────────────────────────────────────────────────
   function audit(userId, action, target) {
     const log = getArr(KEYS.auditLog);
@@ -73,6 +132,7 @@ const DB = (() => {
     const item = { ...data, id: data.id || generateId(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     arr.push(item);
     setArr(key, arr);
+    SB.upsertRow(key, item);
     audit(actorId, `INSERT:${key}`, item.id);
     return item;
   }
@@ -83,6 +143,7 @@ const DB = (() => {
     if (idx === -1) return null;
     arr[idx] = { ...arr[idx], ...data, id, updatedAt: new Date().toISOString() };
     setArr(key, arr);
+    SB.upsertRow(key, arr[idx]);
     audit(actorId, `UPDATE:${key}`, id);
     return arr[idx];
   }
@@ -91,6 +152,7 @@ const DB = (() => {
     const arr = getArr(key);
     const filtered = arr.filter(item => item.id !== id);
     setArr(key, filtered);
+    SB.deleteRow(key, id);
     audit(actorId, `DELETE:${key}`, id);
   }
 
@@ -100,6 +162,7 @@ const DB = (() => {
     if (idx === -1) return insert(key, data, actorId);
     arr[idx] = { ...arr[idx], ...data, updatedAt: new Date().toISOString() };
     setArr(key, arr);
+    SB.upsertRow(key, arr[idx]);
     audit(actorId, `UPSERT:${key}`, arr[idx].id);
     return arr[idx];
   }
@@ -378,7 +441,9 @@ const DB = (() => {
     get: () => get(KEYS.settings) || {},
     set: (data) => {
       const current = Settings.get();
-      set(KEYS.settings, { ...current, ...data });
+      const merged = { ...current, ...data };
+      set(KEYS.settings, merged);
+      SB.saveSettings(merged);
     },
     getExtraCreditCategories: () => {
       const s = Settings.get();
@@ -880,6 +945,10 @@ const DB = (() => {
 
   // ── Init ─────────────────────────────────────────────────────
   async function init() {
+    try {
+      const remoteHasData = await SB.hydrate();      // no-op unless Supabase is configured
+      if (remoteHasData) set('sb_seeded', true);     // don't seed over existing remote data
+    } catch (e) { console.warn('[SB] init hydrate failed', e); }
     await seed();
     try { Classes.promoteIfDue('system'); } catch (e) { /* no-op */ }
   }

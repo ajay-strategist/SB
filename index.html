@@ -6,7 +6,7 @@
   <meta name="description" content="MentorFile — Digital College Mentorship System for St. Berchmans College. Secure login for Admin, Mentor, HOD, Student, and Parent.">
   <title>Login — MentorFile | St. Berchmans College</title>
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234F46E5'><path d='M4 19.5A2.5 2.5 0 016.5 17H20'/><path d='M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z'/></svg>">
+  <link rel="icon" type="image/png" href="SB Logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="css/main.css">
@@ -82,12 +82,6 @@
         <p>Sign in with your personal email address and password.</p>
       </div>
 
-      <!-- Demo Credentials Box -->
-      <div class="demo-creds">
-        <div class="demo-creds-title">Demo Accounts — click to auto-fill</div>
-        <div class="demo-creds-grid" id="demo-creds-grid"></div>
-      </div>
-
       <!-- Login Form -->
       <form class="auth-form" id="login-form" onsubmit="doLogin(event)" novalidate>
         <div class="form-group" style="margin-bottom:0">
@@ -129,6 +123,8 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
   <script src="js/db.js"></script>
   <script src="js/utils.js"></script>
   <script>
@@ -149,23 +145,6 @@
     // Load stats and college info
     window.addEventListener('DOMContentLoaded', async () => {
       await DB.init();
-
-      // Demo credentials
-      const demoCreds = [
-        { role: 'Admin', email: 'admin@sbc.edu', pass: 'Admin@1234' },
-        { role: 'Mentor', email: 'mentor.priya@sbc.edu', pass: 'Mentor@123' },
-        { role: 'HOD', email: 'hod.science@sbc.edu', pass: 'HOD@1234' },
-        { role: 'Student', email: 'anjali.krishna@gmail.com', pass: 'Student@123' },
-        { role: 'Parent', email: 'krishna.parent@gmail.com', pass: 'Parent@123' },
-        { role: 'At-Risk Stu.', email: 'arjun.babu@gmail.com', pass: 'Student@123' },
-      ];
-
-      document.getElementById('demo-creds-grid').innerHTML = demoCreds.map(c => `
-        <div class="demo-cred-item" onclick="autofill('${c.email}','${c.pass}')">
-          <div class="demo-cred-role">${c.role}</div>
-          <div class="demo-cred-email">${c.email}</div>
-          <div class="demo-cred-pass">${c.pass}</div>
-        </div>`).join('');
 
       // Eye icon
       document.getElementById('login-pwd-eye').innerHTML = Icons.eye;
