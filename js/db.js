@@ -76,15 +76,16 @@ const DB = (() => {
     async function hydrate() {
       if (!enabled) return false;
       let hasUsers = false;
-      for (const key of Object.keys(TABLE)) {
+      // Fetch all collection tables in parallel (faster, and one await point).
+      await Promise.allSettled(Object.keys(TABLE).map(async (key) => {
         try {
           const { data, error } = await client.from(TABLE[key]).select('id,data');
-          if (error) { console.warn('[SB] load', TABLE[key], error.message); continue; }
+          if (error) { console.warn('[SB] load', TABLE[key], error.message); return; }
           const arr = (data || []).map(r => ({ ...r.data, id: r.id }));
           localStorage.setItem(key, JSON.stringify(arr));
           if (key === KEYS.users && arr.length) hasUsers = true;
         } catch (e) { console.warn('[SB] hydrate', TABLE[key], e); }
-      }
+      }));
       try {
         const { data } = await client.from('settings').select('data').eq('id', 1).maybeSingle();
         if (data && data.data) localStorage.setItem(KEYS.settings, JSON.stringify(data.data));
@@ -1205,9 +1206,15 @@ const DB = (() => {
   // ── Init ─────────────────────────────────────────────────────
   async function init() {
     try {
-      const remoteHasData = await SB.hydrate();      // no-op unless Supabase is configured
-      // Only skip seeding if Supabase actually returned users
-      if (remoteHasData && getArr(KEYS.users).length > 0) set('sb_seeded', true);
+      // Never let a slow/unreachable Supabase freeze the app: cap hydrate at 4s.
+      const TIMEOUT = Symbol('timeout');
+      const timed = new Promise(res => setTimeout(() => res(TIMEOUT), 4000));
+      const result = await Promise.race([SB.hydrate(), timed]);
+      if (result === TIMEOUT) {
+        console.warn('[SB] hydrate timed out — loading local/seed data instead.');
+      } else if (result === true && getArr(KEYS.users).length > 0) {
+        set('sb_seeded', true); // only skip seeding if Supabase actually returned users
+      }
     } catch (e) { console.warn('[SB] init hydrate failed', e); }
     await seed();
     try { Classes.promoteIfDue('system'); } catch (e) { /* no-op */ }
@@ -1222,8 +1229,7 @@ const DB = (() => {
 
     // Auth
     login, setPassword, requestPasswordReset, resetPassword,
-    getSession, setSession, clearSession, isSessionValid,
-    hashPassword, verifyPassword,
+    getSession, clearSession, isSessionValid,
 
     // Modules
     Departments, Courses, Users, Assignments,
