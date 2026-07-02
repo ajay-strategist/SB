@@ -122,12 +122,17 @@ const DB = (() => {
   })();
 
   // ── Audit log ────────────────────────────────────────────────
+  // Supabase Auth is not yet provisioned (no auth users / RPCs). Keep AUTH
+  // local (custom login against the seeded users) while Supabase is still
+  // used for data sync. Flip to true once Supabase Auth + RPCs are set up.
+  const SB_AUTH = false;
+
   function audit(userId, action, target) {
     const log = getArr(KEYS.auditLog);
     log.push({ id: generateId(), timestamp: new Date().toISOString(), userId, action, target });
     if (log.length > 1000) log.splice(0, log.length - 1000);
     setArr(KEYS.auditLog, log);
-    if (SB.enabled && SB.client) {
+    if (SB_AUTH && SB.client) {
       SB.client.rpc('log_audit_event', { p_action: action, p_target: target })
         .then(({ error }) => { if (error) console.warn('[SB] audit log failed', error.message); });
     }
@@ -293,7 +298,7 @@ const DB = (() => {
   let cachedSession = null;
   
   function getSession() {
-    if (SB.enabled && SB.client) {
+    if (SB_AUTH && SB.client) {
       const token = getSupabaseToken();
       if (!token) return null;
       const payload = parseJwt(token);
@@ -342,7 +347,7 @@ const DB = (() => {
 
   // ── Auth ─────────────────────────────────────────────────────
   async function login(email, password) {
-    if (SB.enabled && SB.client) {
+    if (SB_AUTH && SB.client) {
       const { data, error } = await SB.client.auth.signInWithPassword({ email, password });
       if (error) return { ok: false, error: error.message };
       
@@ -372,7 +377,7 @@ const DB = (() => {
   }
 
   async function setPassword(token, password) {
-    if (SB.enabled && SB.client) {
+    if (SB_AUTH && SB.client) {
       const { data: res, error } = await SB.client.rpc('redeem_invite_token', { p_token: token });
       if (error) return { ok: false, error: error.message };
       
@@ -411,7 +416,7 @@ const DB = (() => {
   }
 
   async function requestPasswordReset(email) {
-    if (SB.enabled && SB.client) {
+    if (SB_AUTH && SB.client) {
       const { error } = await SB.client.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/pages/set-password.html`
       });
@@ -430,7 +435,7 @@ const DB = (() => {
   }
 
   async function resetPassword(token, password) {
-    if (SB.enabled && SB.client) {
+    if (SB_AUTH && SB.client) {
       const { error } = await SB.client.auth.updateUser({ password: password });
       if (error) return { ok: false, error: error.message };
       const sessionObj = getSession();
@@ -465,7 +470,7 @@ const DB = (() => {
     }
     localStorage.removeItem('sb_session');
     localStorage.removeItem('sb_seeded');
-    if (SB.enabled && SB.client) {
+    if (SB_AUTH && SB.client) {
       try { await SB.client.auth.signOut(); } catch (e) { /* ignore */ }
     }
     window.location.href = window.location.origin + '/index.html';
@@ -473,7 +478,7 @@ const DB = (() => {
 
   // ── User Management ──────────────────────────────────────────
   async function createUser(data, actorId) {
-    if (SB.enabled && SB.client) {
+    if (SB_AUTH && SB.client) {
       const { data: res, error } = await SB.client.rpc('admin_create_user', {
         p_email: data.email.toLowerCase(),
         p_name: data.name,
