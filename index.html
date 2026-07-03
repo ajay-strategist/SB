@@ -58,6 +58,20 @@
       right: var(--space-4);
       z-index: 100;
     }
+    .auth-page-centered {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: var(--space-6) var(--space-4);
+      background: var(--bg-base);
+    }
+    .auth-page-centered .auth-panel-right {
+      width: 100%;
+      max-width: 440px;
+      box-shadow: var(--shadow-lg);
+      border-radius: var(--border-radius-xl);
+    }
   </style>
 </head>
 <body>
@@ -65,23 +79,12 @@
     <span id="theme-icon"></span>
   </button>
 
-  <div class="auth-page">
-    <!-- Left Branding Panel -->
-    <div class="auth-panel-left" style="position:relative;overflow:hidden;">
-      <div class="auth-bg-zoom" style="position:absolute;inset:0;background-image:linear-gradient(rgba(15,23,42,0.78), rgba(15,23,42,0.86)), url('SB Background Image.jpg');background-size:cover;background-position:center;z-index:1;"></div>
-      <div style="position:relative;z-index:2;height:100%;display:flex;flex-direction:column;justify-content:space-between;width:100%;">
-        <div class="auth-brand">
-          <img src="SB Logo.png" alt="St. Berchmans College" id="college-logo-brand" style="height:72px;">
-        </div>
-
-        <div class="auth-hero">
-          <div class="auth-hero-tagline">The <span>Digital</span><br>Mentor's File</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right Login Panel -->
+  <div class="auth-page auth-page-centered">
+    <!-- Login Panel -->
     <div class="auth-panel-right">
+      <div style="text-align:center;margin-bottom:var(--space-5);">
+        <img src="SB Logo.png" alt="St. Berchmans College" style="height:56px;">
+      </div>
       <div class="auth-form-header">
         <h2>Welcome back</h2>
         <p>Sign in with your personal email address and password.</p>
@@ -122,6 +125,11 @@
           Don't have an account? Your institution admin will send you an invite email.
         </p>
       </div>
+
+      <div style="margin-top:var(--space-5);padding-top:var(--space-4);border-top:1px solid var(--border-subtle);text-align:center;">
+        <div style="font-size:10px;color:var(--text-tertiary);letter-spacing:0.06em;text-transform:uppercase;font-weight:500;margin-bottom:var(--space-2);">Powered by</div>
+        <img src="KVJ analytics Logo.png" alt="KVJ Analytics" style="height:32px;width:auto;opacity:0.85;">
+      </div>
     </div>
   </div>
 
@@ -141,9 +149,8 @@
 
     // Update theme button
     function updateThemeBtn() {
-      const isDark = Theme.get() === 'dark';
-      document.getElementById('theme-icon').innerHTML = isDark ? Icons.sun : Icons.moon;
-      document.getElementById('theme-toggle-btn').title = isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+      document.getElementById('theme-icon').innerHTML = Icons.bulb;
+      document.getElementById('theme-toggle-btn').title = Theme.get() === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
     }
     updateThemeBtn();
 

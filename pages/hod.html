@@ -137,7 +137,7 @@
       document.getElementById('sidebar').classList.remove('mobile-open');
       document.getElementById('mobile-overlay').classList.remove('show');
     }
-    function updateThemeIcon() { document.getElementById('theme-icon-header').innerHTML = Theme.get() === 'dark' ? Icons.sun : Icons.moon; }
+    function updateThemeIcon() { document.getElementById('theme-icon-header').innerHTML = Icons.bulb; }
     Theme._origToggle = Theme.toggle;
     Theme.toggle = () => { Theme._origToggle(); updateThemeIcon(); };
     function updateNotifBadge() {
