@@ -364,8 +364,7 @@
     }
 
     function updateThemeIcon() {
-      const isDark = Theme.get() === 'dark';
-      document.getElementById('theme-icon-header').innerHTML = isDark ? Icons.sun : Icons.moon;
+      document.getElementById('theme-icon-header').innerHTML = Icons.bulb;
     }
 
     Theme._origToggle = Theme.toggle;
