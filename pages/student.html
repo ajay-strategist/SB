@@ -217,7 +217,7 @@
       const latest = recs[recs.length - 1] || {};
       const status = DB.Analytics.getStudentStatus(session.userId);
       
-      const unconfirmedMeetings = DB.Meetings.getAll(session.userId).filter(m => !m.studentConfirmed);
+      const unconfirmedMeetings = DB.Meetings.getPublic(session.userId).filter(m => !m.studentConfirmed);
 
       container.innerHTML = `
         <div class="page-header">
@@ -507,7 +507,7 @@
 
     // ── Meetings & Confirmation Page ──────────────────────────────
     function renderMeetings(container) {
-      const meetings = DB.Meetings.getAll(session.userId).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+      const meetings = DB.Meetings.getPublic(session.userId).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
       container.innerHTML = `
         <div class="section-card">
           <div class="section-card-header"><div class="section-card-title">${Icons.calendar} My Meetings</div>
@@ -527,7 +527,7 @@
                       <td style="white-space:normal;max-width:200px">${Str.escHtml(m.goals || '—')}</td>
                       <td>
                         ${m.studentConfirmed
-                          ? `<span class="badge badge-green">${Icons.check} Attended & Confirmed</span>`
+                          ? `<span class="badge badge-green" style="white-space:nowrap;display:inline-flex;align-items:center;gap:4px"><span style="width:14px;height:14px;display:inline-flex">${Icons.check}</span> Confirmed</span>`
                           : `<button class="btn btn-primary btn-sm hover-lift press-scale" onclick="confirmMeeting('${m.id}')">Acknowledge Attendance</button>`}
                       </td>
                     </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No meetings found.</td></tr>'}
@@ -587,7 +587,7 @@
         </div>
 
         ${(() => {
-          const mtgGoals = DB.Meetings.getAll(session.userId).filter(m => m.goals && m.goals.trim()).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+          const mtgGoals = DB.Meetings.getPublic(session.userId).filter(m => m.goals && m.goals.trim()).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
           if (!mtgGoals.length) return '';
           return `<div class="section-card mb-6">
             <div class="section-card-header"><div class="section-card-title">${Icons.target} Goals Set by Mentor</div></div>

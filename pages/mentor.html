@@ -286,6 +286,7 @@
             <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
             <td><div class="flex gap-2">
               <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="viewMenteeFile('${s.id}')">${Icons.fileText} Report</button>
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="editStudentIdentity('${s.id}')" title="Edit name & email">${Icons.edit}</button>
               <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="scheduleMeetingFor('${s.id}')" title="Schedule Meeting">${Icons.calendar}</button>
               <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="referToHOD('${s.id}')" title="Refer to HOD">${Icons.link}</button>
               ${s.parentEmail ? (s.parentApproved
@@ -295,6 +296,29 @@
           </tr>`;
         }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students.</td></tr>'}</tbody>
       </table></div></div>`;
+    }
+
+    // Teacher sets a student's Name & Email; the student fills the rest of their profile themselves.
+    function editStudentIdentity(studentId) {
+      const s = DB.Users.getById(studentId);
+      Modal.create('edit-id', {
+        title: 'Edit Student Name & Email', size: 'sm',
+        body: `
+          <div class="alert alert-info mb-4">${Icons.info} You set the name & login email. The student completes the rest of their profile after logging in.</div>
+          <div class="form-group"><label class="form-label required">Full Name</label><input class="form-input" id="ei-name" value="${Str.escHtml(s.name)}"></div>
+          <div class="form-group"><label class="form-label required">Email (login ID)</label><input type="email" class="form-input" id="ei-email" value="${Str.escHtml(s.email)}"></div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-id')">Cancel</button>
+                 <button class="btn btn-primary" onclick="saveStudentIdentity('${studentId}')">Save</button>`,
+      });
+    }
+    function saveStudentIdentity(studentId) {
+      const name = document.getElementById('ei-name').value.trim();
+      const email = document.getElementById('ei-email').value.trim().toLowerCase();
+      if (!name || !email) { Toast.error('Name and email required'); return; }
+      DB.Users.update(studentId, { name, email }, session.userId);
+      Toast.success('Saved', 'Student name & email updated.');
+      Modal.close('edit-id');
+      renderClassTab();
     }
 
     // Refer a student to the HOD
@@ -406,7 +430,7 @@
               ${flagged.map(s => {
                 const status = DB.Analytics.getStudentStatus(s.id);
                 const course = DB.Courses.getById(s.courseId);
-                return `<div style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3 var(--space-5));border-bottom:1px solid var(--border-color);cursor:pointer" onclick="viewMenteeFile('${s.id}')">
+                return `<div style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-5);border-bottom:1px solid var(--border-color);cursor:pointer" onclick="viewMenteeFile('${s.id}')">
                   ${renderAvatar(s.name,'sm',null,s.id)}
                   <div style="flex:1;min-width:0"><div class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${s.name}</div><div class="text-xs text-muted">${course?.name || '—'} · Attendance ${currentSemAttendance(s.id)}</div></div>
                   ${renderStatusBadge(status)}

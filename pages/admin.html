@@ -685,9 +685,18 @@
               <span class="toggle-slider"></span>
             </label>
           </div>` : ''}`,
-        footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-user')">Cancel</button>
+        footer: `<button class="btn btn-secondary" onclick="resetUserPassword('${id}')">Reset Password</button>
+                 <button class="btn btn-secondary" onclick="Modal.close('edit-user')">Cancel</button>
                  <button class="btn btn-primary" onclick="saveEditUser('${id}')">Update User</button>`,
       });
+    }
+
+    function resetUserPassword(id) {
+      const u = DB.Users.getById(id);
+      Modal.confirm({ title: 'Reset Password', message: `Reset ${u.name}'s password to the default (<strong>${DB.getDefaultPassword()}</strong>)? They can change it after logging in.`, confirmText: 'Reset', confirmClass: 'btn-primary', onConfirm: () => {
+        DB.Users.resetPassword(id, session.userId);
+        Toast.success('Password reset', `${u.name} can now log in with the default password.`);
+      }});
     }
 
     function saveEditUser(id) {

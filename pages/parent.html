@@ -107,6 +107,17 @@
   <script>
     let session;
     let ward = null;
+    let children = [];
+    let currentWardId = null;
+
+    function renderChildSwitcher() {
+      return `<div style="display:flex;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-4)">
+        ${children.map(c => `<button class="btn ${c.id===currentWardId?'btn-primary':'btn-secondary'} btn-sm" onclick="selectChild('${c.id}')">
+          ${Str.escHtml(c.name)}${c.parentApproved ? '' : ' · <span style="font-size:10px">pending</span>'}
+        </button>`).join('')}
+      </div>`;
+    }
+    function selectChild(id) { currentWardId = id; loadWardDetails(); }
 
     window.addEventListener('DOMContentLoaded', async () => {
       await DB.init();
@@ -118,21 +129,23 @@
 
     function loadWardDetails() {
       Motion.transition(document.querySelector('.parent-container'), () => {
-        // Find linked student
-        ward = DB.Users.getById(session.linkedStudentId);
-        if (!ward) {
-          // Fallback: search by parentEmail
-          ward = DB.Users.getAll().find(u => u.parentEmail === session.email && u.role === 'student');
+        // Find ALL children linked by parent email (a parent may have 2+ kids)
+        children = DB.ParentLinks.getChildrenForEmail(session.email);
+        if (!children.length && session.linkedStudentId) {
+          const w = DB.Users.getById(session.linkedStudentId);
+          if (w) children = [w];
         }
-
-        if (!ward) {
+        if (!children.length) {
           document.getElementById('ward-info').innerHTML = `<div class="alert alert-error">No linked student account was found. Please contact administration.</div>`;
           return;
         }
+        ward = children.find(c => c.id === currentWardId) || children.find(c => c.parentApproved) || children[0];
+        currentWardId = ward.id;
+        const switcherHtml = children.length > 1 ? renderChildSwitcher() : '';
 
-        // Access gate: parent may only view once approved by staff
+        // Access gate: parent may only view once THIS child is approved by staff
         if (!ward.parentApproved) {
-          document.getElementById('ward-info').innerHTML = `<div class="alert alert-warning">${Icons.alert}<div>Your access to <strong>${ward.name}</strong>'s records is <strong>pending approval</strong> by the school (Teacher / HOD / Principal / Admin). You'll be able to view the report once approved.</div></div>`;
+          document.getElementById('ward-info').innerHTML = switcherHtml + `<div class="alert alert-warning">${Icons.alert}<div>Access to <strong>${Str.escHtml(ward.name)}</strong>'s records is <strong>pending approval</strong> by the school (Teacher / HOD / Principal / Admin). You'll see the report once approved.</div></div>`;
           document.getElementById('grades-tbody').innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">Locked until access is approved.</td></tr>`;
           document.getElementById('pta-tbody').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">Locked until access is approved.</td></tr>`;
           return;
@@ -144,7 +157,7 @@
         const mentorId = DB.Assignments.getMentor(ward.id);
         const mentor = mentorId ? DB.Users.getById(mentorId) : null;
 
-        document.getElementById('ward-info').innerHTML = `
+        document.getElementById('ward-info').innerHTML = switcherHtml + `
           <div class="form-grid">
             <div class="form-group"><label class="form-label">Name of Student</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(ward.name)}</div></div>
             <div class="form-group"><label class="form-label">Roll Number</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(profile.rollNo || '—')}</div></div>

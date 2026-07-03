@@ -345,6 +345,31 @@ const DB = (() => {
     return !!getSession();
   }
 
+  // ── Password hashing & default password ──────────────────────
+  // Common default password used at first login; users change it after.
+  // Staff "reset" clears the stored hash so the account reverts to this.
+  const DEFAULT_PASSWORD = 'Sbc@12345';
+  async function hashPassword(password) {
+    try {
+      const enc = new TextEncoder().encode(password);
+      const buf = await crypto.subtle.digest('SHA-256', enc);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      let hash = 0;
+      for (let i = 0; i < password.length; i++) { hash = ((hash << 5) - hash) + password.charCodeAt(i); hash |= 0; }
+      return 'fb_' + Math.abs(hash).toString(16);
+    }
+  }
+  async function verifyPassword(password, hash) {
+    if (!hash) return false;
+    return (await hashPassword(password)) === hash;
+  }
+  // Verify against the user's stored hash, or the default password if none set yet.
+  async function verifyUserPassword(user, password) {
+    if (user && user.passwordHash) return await verifyPassword(password, user.passwordHash);
+    return password === DEFAULT_PASSWORD;
+  }
+
   // ── Auth ─────────────────────────────────────────────────────
   async function login(email, password) {
     if (SB_AUTH && SB.client) {
@@ -368,8 +393,9 @@ const DB = (() => {
       const users = findAll(KEYS.users);
       const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
       if (!user) return { ok: false, error: 'No account found with this email address.' };
-      if (user.status === 'invited') return { ok: false, error: 'Please check your email and set your password first.' };
       if (user.status === 'suspended') return { ok: false, error: 'Your account has been suspended. Contact admin.' };
+      const ok = await verifyUserPassword(user, password);
+      if (!ok) return { ok: false, error: 'Incorrect password. Please try again.' };
       const session = setCachedSession(user);
       audit(user.id, 'LOGIN', user.email);
       return { ok: true, session, user };
@@ -574,6 +600,8 @@ const DB = (() => {
     delete: (id, actor) => remove(KEYS.users, id, actor),
     create: createUser,
     bulkImport: bulkImportUsers,
+    // Staff reset: clears the stored hash so the account reverts to the default password.
+    resetPassword: (id, actor) => update(KEYS.users, id, { passwordHash: null }, actor),
   };
 
   // ── Mentor Assignments ───────────────────────────────────────
@@ -628,6 +656,10 @@ const DB = (() => {
   // ── Mentor Meetings ──────────────────────────────────────────
   const Meetings = {
     getAll: studentId => mergeSecrets(findWhere(KEYS.mentorMeetings, m => m.studentId === studentId)),
+    // Non-staff view: meetings WITHOUT confidential/private fields (raw records
+    // never contain the secrets — they are only re-attached by mergeSecrets).
+    // Use this for student & parent views so their client never receives them.
+    getPublic: studentId => findWhere(KEYS.mentorMeetings, m => m.studentId === studentId).map(m => ({ ...m })),
     getBySemester: (studentId, semester) => mergeSecrets(findWhere(KEYS.mentorMeetings, m => m.studentId === studentId && m.semester === semester)),
     getByMentor: mentorId => mergeSecrets(findWhere(KEYS.mentorMeetings, m => m.mentorId === mentorId)),
     create: (data, actor) => insert(KEYS.mentorMeetings, data, actor),
@@ -836,6 +868,8 @@ const DB = (() => {
       const p = findById(KEYS.users, parentId);
       return p && p.linkedStudentId ? findById(KEYS.users, p.linkedStudentId) : null;
     },
+    // All students whose Parent Email matches this email (a parent may have 2+ kids).
+    getChildrenForEmail: (email) => findWhere(KEYS.users, u => u.role === 'student' && (u.parentEmail || '').toLowerCase() === (email || '').toLowerCase()),
     isApproved: (studentId) => {
       const s = findById(KEYS.users, studentId);
       return !!(s && s.parentApproved);
@@ -1235,6 +1269,8 @@ const DB = (() => {
     // Auth
     login, setPassword, requestPasswordReset, resetPassword,
     getSession, clearSession, isSessionValid,
+    hashPassword, verifyPassword, verifyUserPassword,
+    getDefaultPassword: () => DEFAULT_PASSWORD,
 
     // Modules
     Departments, Courses, Users, Assignments,

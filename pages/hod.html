@@ -411,10 +411,19 @@
             <span class="text-sm">Parent access approved</span>
             <input type="checkbox" id="es-approved" ${s.parentApproved?'checked':''}>
           </div>`,
-        footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-stu')">Cancel</button>
+        footer: `<button class="btn btn-secondary" onclick="resetStudentPassword('${studentId}')">Reset Password</button>
+                 <button class="btn btn-secondary" onclick="Modal.close('edit-stu')">Cancel</button>
                  <button class="btn btn-primary" onclick="saveStudentUser('${studentId}')">Save</button>`,
       });
     }
+    function resetStudentPassword(studentId) {
+      const u = DB.Users.getById(studentId);
+      Modal.confirm({ title: 'Reset Password', message: `Reset ${u.name}'s password to the default (<strong>${DB.getDefaultPassword()}</strong>)?`, confirmText: 'Reset', confirmClass: 'btn-primary', onConfirm: () => {
+        DB.Users.resetPassword(studentId, session.userId);
+        Toast.success('Password reset', `${u.name} can log in with the default password.`);
+      }});
+    }
+
     function saveStudentUser(studentId) {
       const name = document.getElementById('es-name').value.trim();
       const gender = document.getElementById('es-gender').value;

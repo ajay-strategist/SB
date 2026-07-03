@@ -499,9 +499,10 @@ const StudentReport = {
     const course = DB.Courses.getById(student.courseId);
     const semCount = course ? course.semesterCount : 6;
     const recs = DB.SemesterRecords.getAll(studentId);
-    const meetings = DB.Meetings.getAll(studentId).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const ov = StudentReport.overview(studentId);
     const showConf = StudentReport.canSeeConfidential(viewerRole);
+    // Students/parents get meetings WITHOUT confidential/private fields.
+    const meetings = (showConf ? DB.Meetings.getAll(studentId) : DB.Meetings.getPublic(studentId)).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const parent = DB.ParentLinks ? DB.ParentLinks.getParentForStudent(studentId) : null;
 
     // Semester-wise + subject-wise
@@ -661,8 +662,51 @@ function showUserMenu() {
       <hr class="divider">
       <div style="display:flex;flex-direction:column;gap:var(--space-2)">
         <button class="btn btn-secondary btn-full" onclick="showChangePassword()">Change Password</button>
+        ${['principal','hod','mentor'].includes(session.role) ? `<button class="btn btn-secondary btn-full" onclick="showEmailConfig()">${Icons.mail} Email Configuration</button>` : ''}
       </div>`,
   });
+}
+
+// Email configuration for Principal / HOD / Teacher (per-user sender settings)
+function showEmailConfig() {
+  Modal.close('user-menu');
+  const session = DB.getSession();
+  const cfg = (DB.Settings.get().userEmailConfig || {})[session.userId] || {};
+  Modal.create('email-config', {
+    title: 'Email Configuration', size: 'md',
+    body: `
+      <div class="alert alert-info mb-4">${Icons.info} Set the email account used to send messages to ${session.role === 'mentor' ? 'students & parents' : 'your recipients'}.</div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Provider</label>
+          <select class="form-select" id="ec-type">
+            ${['SMTP','Gmail','Outlook','SendGrid'].map(t => `<option ${cfg.type===t?'selected':''}>${t}</option>`).join('')}
+          </select></div>
+        <div class="form-group"><label class="form-label">From Email</label><input class="form-input" id="ec-from" value="${Str.escHtml(cfg.fromEmail||session.email||'')}"></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">SMTP Host</label><input class="form-input" id="ec-host" value="${Str.escHtml(cfg.host||'')}" placeholder="smtp.gmail.com"></div>
+        <div class="form-group"><label class="form-label">Port</label><input type="number" class="form-input" id="ec-port" value="${cfg.port||587}"></div>
+        <div class="form-group"><label class="form-label">Username</label><input class="form-input" id="ec-user" value="${Str.escHtml(cfg.user||'')}"></div>
+        <div class="form-group"><label class="form-label">Password / App Key</label><input type="password" class="form-input" id="ec-pass" value="${Str.escHtml(cfg.pass||'')}"></div>
+      </div>`,
+    footer: `<button class="btn btn-secondary" onclick="Modal.close('email-config')">Cancel</button>
+             <button class="btn btn-primary" onclick="saveEmailConfig()">Save</button>`,
+  });
+}
+function saveEmailConfig() {
+  const session = DB.getSession();
+  const all = DB.Settings.get().userEmailConfig || {};
+  all[session.userId] = {
+    type: document.getElementById('ec-type').value,
+    fromEmail: document.getElementById('ec-from').value.trim(),
+    host: document.getElementById('ec-host').value.trim(),
+    port: parseInt(document.getElementById('ec-port').value) || 587,
+    user: document.getElementById('ec-user').value.trim(),
+    pass: document.getElementById('ec-pass').value,
+  };
+  DB.Settings.set({ userEmailConfig: all });
+  Modal.close('email-config');
+  Toast.success('Saved', 'Email configuration updated.');
 }
 
 function showChangePassword() {
@@ -707,7 +751,7 @@ async function doChangePassword() {
   if (newPwd.length < 8) { errEl.innerHTML = `<div class="auth-error">${Icons.alert} Password must be at least 8 characters.</div>`; return; }
 
   const user = DB.Users.getById(session.userId);
-  const valid = await DB.verifyPassword(current, user.passwordHash);
+  const valid = await DB.verifyUserPassword(user, current);
   if (!valid) { errEl.innerHTML = `<div class="auth-error">${Icons.alert} Current password is incorrect.</div>`; return; }
 
   const hash = await DB.hashPassword(newPwd);
