@@ -215,3 +215,24 @@
     animation: none !important;
   }
 }
+
+/* ── Auto-applied micro-interactions (no class needed) ── */
+@media (prefers-reduced-motion: no-preference) {
+  .btn { transition: transform var(--dur-1) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out); }
+  .btn:active { transform: scale(0.97); }
+  .stat-card, .mentee-card, .class-card {
+    transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+    will-change: transform;
+  }
+  .stat-card:hover, .mentee-card:hover, .class-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 22px -10px rgba(15, 23, 42, 0.18);
+  }
+  .nav-item { transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
+  .modal { animation: mo-modal-in var(--dur-3) var(--ease-out); }
+  .toast { animation: mo-toast-in var(--dur-3) var(--ease-out); }
+  .rating-dot-btn { transition: transform var(--dur-1) var(--ease-out), background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
+  .rating-dot-btn:active { transform: scale(0.9); }
+}
+@keyframes mo-modal-in { from { opacity: 0; transform: scale(0.98) translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes mo-toast-in  { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }

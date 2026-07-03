@@ -923,6 +923,7 @@
     if (done) {
       const m = DB.Meetings.getAll(selectedStudentId).find(x => x.id === id);
       DB.Notifications.create(selectedStudentId, 'Goal Completed', `Your mentor marked a goal as completed: "${(m?.goals||'').slice(0,60)}"`, 'success');
+      if (window.Motion) Motion.celebrate();
     }
     Toast.success(done ? 'Goal Completed' : 'Goal Reopened');
     renderSubTabContent();

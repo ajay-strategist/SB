@@ -226,18 +226,70 @@ window.Motion = (() => {
 
   function triggerAutoEffects(root = document) {
     if (!root) return;
+    // Explicit opt-in count-ups
     root.querySelectorAll('.count-up-value').forEach(el => {
       if (el.classList.contains('counted-up')) return;
       el.classList.add('counted-up');
       const targetVal = parseFloat(el.dataset.target) || 0;
       countUp(el, targetVal);
     });
+    // Auto count-up for stat cards showing a plain integer (no markup)
+    root.querySelectorAll('.stat-card-value').forEach(el => {
+      if (el.classList.contains('mo-counted')) return;
+      const txt = (el.textContent || '').trim();
+      if (!/^\d{1,6}$/.test(txt) || el.children.length) { el.classList.add('mo-counted'); return; }
+      el.classList.add('mo-counted');
+      countUp(el, parseInt(txt, 10));
+    });
+    // Rings
     root.querySelectorAll('.attendance-ring-path').forEach(el => {
       if (el.classList.contains('ring-drawn')) return;
       el.classList.add('ring-drawn');
       const percent = parseFloat(el.dataset.percent) || 0;
       drawRing(el, percent);
     });
+    // Staggered entrance for cards (once per insertion)
+    autoReveal(root);
+  }
+
+  // Reveal top-level cards with a gentle staggered rise
+  function autoReveal(root = document) {
+    if (isReduced() || !window.gsap) return;
+    const groups = [
+      ['.stats-grid', '.stat-card'],
+      ['.mentee-grid', '.section-card, .mentee-card, .class-card'],
+    ];
+    groups.forEach(([wrapSel, itemSel]) => {
+      root.querySelectorAll(wrapSel).forEach(wrap => {
+        const items = [...wrap.querySelectorAll(itemSel)].filter(el => !el.classList.contains('mo-in'));
+        if (!items.length) return;
+        items.forEach(el => el.classList.add('mo-in'));
+        window.gsap.fromTo(items, { opacity: 0, y: 12 },
+          { opacity: 1, y: 0, duration: 0.32, stagger: 0.05, ease: 'power2.out', clearProps: 'all' });
+      });
+    });
+    // Standalone section cards not inside a grid
+    const cards = [...root.querySelectorAll('.page-content > .section-card, #sub-tab-content > .section-card, .page-content > .grid > .section-card')].filter(el => !el.classList.contains('mo-in'));
+    if (cards.length) {
+      cards.forEach(el => el.classList.add('mo-in'));
+      window.gsap.fromTo(cards, { opacity: 0, y: 12 },
+        { opacity: 1, y: 0, duration: 0.32, stagger: 0.06, ease: 'power2.out', clearProps: 'all' });
+    }
+  }
+
+  // Watch the main content area so effects run no matter how a page renders
+  function observeContent() {
+    const targets = ['page-content', 'sub-tab-content'];
+    let scheduled = false;
+    const run = () => { scheduled = false; targets.forEach(id => { const el = document.getElementById(id); if (el) triggerAutoEffects(el); }); };
+    const obs = new MutationObserver(() => { if (scheduled) return; scheduled = true; requestAnimationFrame(run); });
+    const attach = () => {
+      const pc = document.getElementById('page-content');
+      if (pc) obs.observe(pc, { childList: true, subtree: true });
+    };
+    attach();
+    // re-attach in case content container is created later
+    document.addEventListener('DOMContentLoaded', attach);
   }
 
   /**
@@ -285,10 +337,11 @@ window.Motion = (() => {
     }
   }
 
-  // Auto trigger on content loaded
+  // Auto trigger on content loaded + observe future content changes
   window.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => triggerAutoEffects(document), 100);
+    setTimeout(() => triggerAutoEffects(document), 120);
   });
+  observeContent();
 
   return {
     isReduced,
@@ -300,6 +353,7 @@ window.Motion = (() => {
     glideUnderline,
     glidePill,
     transition,
-    triggerAutoEffects
+    triggerAutoEffects,
+    autoReveal
   };
 })();
