@@ -348,7 +348,7 @@ const DB = (() => {
   // ── Password hashing & default password ──────────────────────
   // Common default password used at first login; users change it after.
   // Staff "reset" clears the stored hash so the account reverts to this.
-  const DEFAULT_PASSWORD = 'Sbc@12345';
+  const DEFAULT_PASSWORD = 'password';
   async function hashPassword(password) {
     try {
       const enc = new TextEncoder().encode(password);
@@ -383,7 +383,6 @@ const DB = (() => {
         await SB.client.auth.signOut();
         return { ok: false, error: 'User profile record not found.' };
       }
-      if (user.status === 'invited') return { ok: false, error: 'Please check your email and set your password first.' };
       if (user.status === 'suspended') return { ok: false, error: 'Your account has been suspended. Contact admin.' };
       
       setCachedSession(user);
@@ -432,7 +431,8 @@ const DB = (() => {
       const tokens = getArr(KEYS.inviteTokens);
       const tok = tokens.find(t => t.token === token && t.expiresAt > Date.now() && !t.used);
       if (!tok) return { ok: false, error: 'This link is invalid or has expired.' };
-      update(KEYS.users, tok.userId, { status: 'active' }, tok.userId);
+      const hash = await hashPassword(password);
+      update(KEYS.users, tok.userId, { status: 'active', passwordHash: hash }, tok.userId);
       const tokIdx = tokens.findIndex(t => t.token === token);
       tokens[tokIdx].used = true;
       setArr(KEYS.inviteTokens, tokens);
@@ -480,7 +480,8 @@ const DB = (() => {
       const resets = getArr(KEYS.passwordResets);
       const rst = resets.find(r => r.token === token && r.expiresAt > Date.now() && !r.used);
       if (!rst) return { ok: false, error: 'This reset link is invalid or has expired.' };
-      update(KEYS.users, rst.userId, { status: 'active' }, rst.userId);
+      const hash = await hashPassword(password);
+      update(KEYS.users, rst.userId, { status: 'active', passwordHash: hash }, rst.userId);
       const idx = resets.findIndex(r => r.token === token);
       resets[idx].used = true;
       setArr(KEYS.passwordResets, resets);
@@ -524,26 +525,20 @@ const DB = (() => {
     } else {
       const existing = findAll(KEYS.users).find(u => u.email.toLowerCase() === data.email.toLowerCase());
       if (existing) return { ok: false, error: 'A user with this email already exists.' };
-      const token = generateId() + generateId();
       const user = insert(KEYS.users, {
         email: data.email.toLowerCase(),
         name: data.name,
         role: data.role,
         departmentId: data.departmentId || null,
         courseId: data.courseId || null,
-        status: 'invited',
+        status: 'active',
         passwordHash: null,
         phone: data.phone || null,
         parentEmail: data.parentEmail || null,
         linkedStudentId: data.linkedStudentId || null,
         classId: data.classId || null,
       }, actorId);
-      const tokens = getArr(KEYS.inviteTokens);
-      tokens.push({ token, userId: user.id, email: user.email, expiresAt: Date.now() + 7 * 24 * 3600 * 1000, used: false, createdAt: new Date().toISOString() });
-      setArr(KEYS.inviteTokens, tokens);
-      const link = `${window.location.origin}/pages/set-password.html?invite=${token}`;
-      console.info(`[EMAIL] Invite sent to ${user.email}: ${link}`);
-      return { ok: true, user, inviteToken: token, inviteLink: link };
+      return { ok: true, user };
     }
   }
 
@@ -995,11 +990,12 @@ const DB = (() => {
     const adminUser = insert(KEYS.users, {
       id: 'a1a1a1a1-a1a1-41a1-a1a1-a1a1a1a1a111',
       email: 'admin@sbc.edu',
-      name: 'Dr. George Mathew',
+      name: 'Admin',
       role: 'admin',
       status: 'active',
       departmentId: null,
       courseId: null,
+      passwordHash: 'bc78e58d55cde1346e68f8e5fe588dedf62fa457aa646a500a53347faff6ee24',
     }, 'system');
 
     // Users: Mentors

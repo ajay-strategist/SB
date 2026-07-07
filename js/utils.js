@@ -46,7 +46,7 @@ const Toast = (() => {
 const Modal = (() => {
   const modals = {};
 
-  function create(id, { title, body, footer = '', size = '' } = {}) {
+  function create(id, { title, body, footer = '', size = '', closeable = true } = {}) {
     close(id);
     const overlay = document.createElement('div');
     overlay.id = `modal-${id}`;
@@ -55,15 +55,18 @@ const Modal = (() => {
       <div class="modal ${size ? 'modal-' + size : ''}">
         <div class="modal-header">
           <h3 class="modal-title">${title || ''}</h3>
+          ${closeable ? `
           <button class="modal-close" onclick="Modal.close('${id}')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+          </button>` : ''}
         </div>
         <div class="modal-body">${body || ''}</div>
         ${footer ? `<div class="modal-footer">${footer}</div>` : ''}
       </div>`;
     document.body.appendChild(overlay);
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(id); });
+    if (closeable) {
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(id); });
+    }
     requestAnimationFrame(() => overlay.classList.add('open'));
     modals[id] = overlay;
     document.body.style.overflow = 'hidden';
@@ -585,6 +588,14 @@ function requireAuth(allowedRoles = []) {
     return null;
   }
   const session = DB.getSession();
+  const user = DB.Users.getById(session.userId);
+  if (user && !user.passwordHash) {
+    if (!document.getElementById('modal-change-password')) {
+      setTimeout(() => {
+        showForcedChangePassword();
+      }, 200);
+    }
+  }
   if (allowedRoles.length && !allowedRoles.includes(session.role)) {
     window.location.href = `${getRootPath()}/index.html`;
     return null;
@@ -774,6 +785,74 @@ function togglePwd(inputId) {
   const input = document.getElementById(inputId);
   if (!input) return;
   input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function showForcedChangePassword() {
+  Modal.create('change-password', {
+    title: 'Reset Your Password',
+    size: 'sm',
+    closeable: false,
+    body: `
+      <p class="text-sm text-muted mb-4" style="line-height:1.5">You are logging in with the default password. For security, please choose a new secure password before proceeding.</p>
+      <div class="form-group">
+        <label class="form-label required">New Password</label>
+        <div class="password-input-wrap">
+          <input type="password" class="form-input" id="cp-new" placeholder="Minimum 8 characters" oninput="checkPasswordStrength(this.value)">
+          <button class="password-toggle" onclick="togglePwd('cp-new')">${Icons.eye}</button>
+        </div>
+        <div class="password-strength mt-2">
+          <div class="password-strength-bars">
+            <div class="strength-bar" id="sb1"></div>
+            <div class="strength-bar" id="sb2"></div>
+            <div class="strength-bar" id="sb3"></div>
+            <div class="strength-bar" id="sb4"></div>
+          </div>
+          <div class="password-strength-label" id="strength-label">Enter a password</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label required">Confirm New Password</label>
+        <input type="password" class="form-input" id="cp-confirm" placeholder="Confirm new password">
+      </div>
+      <div id="cp-error"></div>`,
+    footer: `<button class="btn btn-primary btn-full" onclick="doForcedChangePassword()">Update Password & Continue</button>`,
+  });
+}
+
+async function doForcedChangePassword() {
+  const session = DB.getSession();
+  const newPwd = document.getElementById('cp-new')?.value;
+  const confirm = document.getElementById('cp-confirm')?.value;
+  const errEl = document.getElementById('cp-error');
+
+  if (!newPwd || !confirm) { errEl.innerHTML = `<div class="auth-error mt-2">${Icons.alert} All fields are required.</div>`; return; }
+  if (newPwd !== confirm) { errEl.innerHTML = `<div class="auth-error mt-2">${Icons.alert} Passwords do not match.</div>`; return; }
+  if (newPwd.length < 8) { errEl.innerHTML = `<div class="auth-error mt-2">${Icons.alert} Password must be at least 8 characters.</div>`; return; }
+
+  const hash = await DB.hashPassword(newPwd);
+  const updated = DB.Users.update(session.userId, { passwordHash: hash, status: 'active' }, session.userId);
+  if (!updated) { errEl.innerHTML = `<div class="auth-error mt-2">${Icons.alert} Failed to update password.</div>`; return; }
+  
+  Modal.close('change-password');
+  Toast.success('Password changed', 'Your password has been updated successfully. You can now use the platform.');
+}
+
+function checkPasswordStrength(val) {
+  const bars = ['sb1','sb2','sb3','sb4'];
+  const label = document.getElementById('strength-label');
+  if (!label) return;
+  let score = 0;
+  if (val.length >= 8) score++;
+  if (/[A-Z]/.test(val)) score++;
+  if (/[0-9]/.test(val)) score++;
+  if (/[^A-Za-z0-9]/.test(val)) score++;
+  const levels = ['weak','fair','good','strong'];
+  const clsMap = ['filled-weak','filled-fair','filled-good','filled-strong'];
+  bars.forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (el) el.className = 'strength-bar' + (i < score ? ' ' + clsMap[score - 1] : '');
+  });
+  label.textContent = val.length === 0 ? 'Enter a password' : (score >= 3 ? 'Strong password' : score === 2 ? 'Moderate — add symbols or numbers' : 'Weak — try adding uppercase, numbers, symbols');
 }
 
 // Initialize theme on every page load

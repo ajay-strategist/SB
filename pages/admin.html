@@ -517,7 +517,6 @@
           <td>
             <div class="flex gap-2">
               <button class="btn btn-secondary btn-sm btn-icon hover-lift press-scale" onclick="showEditUserModal('${u.id}')" title="Edit">${Icons.edit}</button>
-              ${u.status === 'invited' ? `<button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="showInviteLink('${u.id}')" title="Show invite link">${Icons.link}</button>` : ''}
               <button class="btn btn-danger btn-sm btn-icon hover-lift press-scale" onclick="deleteUser('${u.id}')" title="Delete">${Icons.trash}</button>
             </div>
           </td>
@@ -581,9 +580,9 @@
             <label class="form-label">Parent Email (personal email of parent)</label>
             <input type="email" class="form-input" id="u-student-parent" placeholder="parent.email@gmail.com">
           </div>
-          <div class="alert alert-info">${Icons.info} An invite email will be sent to the user's personal email with a secure link to set their password.</div>`,
+          <div class="alert alert-info">${Icons.info} The user will be created with their email as the username and 'password' as the default password. They will be prompted to reset their password upon their first login.</div>`,
         footer: `<button class="btn btn-secondary" onclick="Modal.close('add-user')">Cancel</button>
-                 <button class="btn btn-primary" onclick="saveAddUser()">Create & Send Invite</button>`,
+                 <button class="btn btn-primary" onclick="saveAddUser()">Create User</button>`,
       });
     }
 
@@ -622,16 +621,19 @@
       if (!result.ok) { Toast.error('Error', result.error); return; }
 
       Modal.close('add-user');
-      Toast.success('User created!', `Invite sent to ${email}.`);
+      Toast.success('User created!', 'Account created with default password.');
 
-      // Show invite link in demo
-      const link = `${window.location.origin}${window.location.pathname.replace('admin.html', '')}set-password.html?invite=${result.inviteToken}`;
       setTimeout(() => {
         Modal.create('invite-link-show', {
-          title: 'Invite Link Generated', size: 'sm',
-          body: `<p class="text-sm text-muted mb-4">In demo mode, no email is sent. Share this link with <strong>${name}</strong>:</p>
-                 <div class="invite-token-box"><a href="${link}" target="_blank" class="invite-link-url">${link}</a></div>
-                 <button class="btn btn-secondary btn-sm mt-4" onclick="navigator.clipboard.writeText('${link}');Toast.success('Copied!')">Copy Link</button>`,
+          title: 'User Account Created', size: 'sm',
+          body: `<p class="text-sm text-muted mb-4">The account has been successfully created. The user can now log in using the following credentials:</p>
+                 <div style="background:var(--bg-surface-2);padding:var(--space-3);border-radius:var(--border-radius-md);margin-bottom:var(--space-4)">
+                   <div class="text-xs text-muted mb-1">Username / Email</div>
+                   <strong class="text-sm d-block mb-3" style="word-break:break-all">${email}</strong>
+                   <div class="text-xs text-muted mb-1">Password</div>
+                   <strong class="text-sm d-block">password</strong>
+                 </div>
+                 <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('Email: ${email}\\nPassword: password');Toast.success('Credentials copied!')">Copy Credentials</button>`,
           footer: `<button class="btn btn-primary" onclick="Modal.close('invite-link-show')">Done</button>`,
         });
       }, 300);
@@ -660,7 +662,7 @@
             <div class="form-group">
               <label class="form-label">Status</label>
               <select class="form-select" id="eu-status">
-                ${['active','invited','suspended'].map(s => `<option value="${s}" ${user.status === s ? 'selected' : ''}>${Str.capitalize(s)}</option>`).join('')}
+                ${['active','suspended'].map(s => `<option value="${s}" ${user.status === s ? 'selected' : ''}>${Str.capitalize(s)}</option>`).join('')}
               </select>
             </div>
           </div>
@@ -829,11 +831,11 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
             </div>
             ${results.map(r => `<div class="audit-item">
               <div class="audit-action">${r.ok ? '✓' : '✗'} Row ${r.row} ${r.email ? '— ' + r.email : ''}</div>
-              ${!r.ok ? `<div class="audit-meta text-danger">${r.error}</div>` : `<div class="audit-meta">Invite sent. Token generated.</div>`}
+              ${!r.ok ? `<div class="audit-meta text-danger">${r.error}</div>` : `<div class="audit-meta">Account created with default password.</div>`}
             </div>`).join('')}
           </div>
         </div>`;
-      if (ok.length) Toast.success(`${ok.length} users imported`, 'Invite links have been generated.');
+      if (ok.length) Toast.success(`${ok.length} users imported`, 'Accounts created with default password.');
     }
 
     function downloadSampleCSV() {
