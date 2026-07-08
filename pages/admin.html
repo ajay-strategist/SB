@@ -799,6 +799,7 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
       const reader = new FileReader();
       reader.onload = e => {
         const text = e.target.result;
+        window._pendingCSVText = text;
         const lines = text.trim().split('\n');
         document.getElementById('import-preview').innerHTML = `
           <div class="alert alert-info">${Icons.info} ${lines.length - 1} user(s) found in file. Review below and confirm import.</div>
@@ -806,15 +807,19 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
             <table class="data-table"><thead><tr><th>#</th>${lines[0].split(',').map(h => `<th>${h.trim()}</th>`).join('')}</tr></thead>
             <tbody>${lines.slice(1).map((l, i) => `<tr><td>${i+1}</td>${l.split(',').map(v => `<td class="text-xs">${v.trim()}</td>`).join('')}</tr>`).join('')}</tbody></table>
           </div>
-          <button class="btn btn-primary mt-4" onclick="doImport(${JSON.stringify(text)})">
+          <button class="btn btn-primary mt-4" onclick="doImport(this)">
             ${Icons.upload} Import ${lines.length - 1} Users
           </button>`;
       };
       reader.readAsText(file);
     }
 
-    async function doImport(csvText) {
-      const btn = event.target;
+    async function doImport(btn) {
+      const csvText = window._pendingCSVText;
+      if (!csvText) {
+        Toast.error('No CSV content loaded');
+        return;
+      }
       btn.disabled = true;
       btn.innerHTML = `<span class="loading-spinner"></span> Importing…`;
       const results = await DB.Users.bulkImport(csvText, session.userId);
