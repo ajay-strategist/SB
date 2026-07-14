@@ -739,7 +739,6 @@
       navigate(activeTab);
     }
 
-    // ── Edit class (course) ──────────────────────────────────────
     // ── Edit class ──────────────────────────────────────
     function editClass(classId) {
       const cls = DB.Classes.getById(classId);
@@ -754,7 +753,11 @@
               <select class="form-select" id="ec-year">${[1,2,3,4,5,6].map(y=>`<option value="${y}" ${cls?.currentYear===y?'selected':''}>${y}</option>`).join('')}</select>
             </div>
             <div class="form-group"><label class="form-label required">Course</label>
-              <select class="form-select" id="ec-course">${courses.map(c=>`<option value="${c.id}" data-code="${c.code||''}" ${cls?.courseId===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+              <select class="form-select" id="ec-course" onchange="syncCourseCode()">${courses.map(c=>`<option value="${c.id}" data-code="${c.code||""}" ${cls?.courseId===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+            </div>
+            <div class="form-group"><label class="form-label required">Course Code</label>
+              <input type="text" class="form-input" id="ec-coursecode" value="${Str.escHtml(cls?.courseCode || '')}" placeholder="e.g. BSC-CS" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+              <div class="text-xs text-muted" style="margin-top:4px">Auto-filled from Course. Edit to override.</div>
             </div>
             <div class="form-group"><label class="form-label required">Batch</label>
               <select class="form-select" id="ec-batch">${['A','B','C','D'].map(b=>`<option value="${b}" ${cls?.batch===b?'selected':''}>${b}</option>`).join('')}</select>
@@ -772,18 +775,27 @@
       });
     }
 
+    function syncCourseCode() {
+      const courseSel = document.getElementById('ec-course');
+      const codeInput = document.getElementById('ec-coursecode');
+      if (!codeInput) return;
+      const autoCode = courseSel.options[courseSel.selectedIndex]?.dataset.code || '';
+      codeInput.value = autoCode.toUpperCase();
+    }
+
     function saveClass(classId) {
       const year = document.getElementById('ec-year').value;
       const courseSel = document.getElementById('ec-course');
       const courseId = courseSel.value;
-      const courseCode = courseSel.options[courseSel.selectedIndex]?.dataset.code || '';
+      const courseCode = (document.getElementById('ec-coursecode')?.value || courseSel.options[courseSel.selectedIndex]?.dataset.code || '').toUpperCase().trim();
       const batch = document.getElementById('ec-batch').value;
       const durationYears = document.getElementById('ec-dur').value;
       const promo = document.getElementById('ec-promo').value;
       const promotionDate = promo ? promo.slice(5) : '06-01';
       const inchargeId = document.getElementById('ec-incharge').value || null;
-      
-      const cls = DB.Classes.getById(classId);
+
+      if (!courseCode) { Toast.error('Course Code is required.'); return; }
+
       const data = { currentYear: year, courseId, courseCode, batch, durationYears, promotionDate, inchargeId };
       DB.Classes.update(classId, data, session.userId);
       Toast.success('Saved', 'Class updated.');
