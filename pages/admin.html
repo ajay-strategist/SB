@@ -569,7 +569,21 @@
             </div>
             <div class="form-group" id="u-course-wrap">
               <label class="form-label">Course</label>
-              <select class="form-select" id="u-course"><option value="">— Select Course —</option></select>
+              <select class="form-select" id="u-course" onchange="populateClassesAndMentors()"><option value="">— Select Course —</option></select>
+            </div>
+          </div>
+          <div class="form-grid" id="u-student-allocations-row" style="display:none">
+            <div class="form-group">
+              <label class="form-label">Assign to Class</label>
+              <select class="form-select" id="u-class">
+                <option value="">— Select Class —</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Assign to Mentor</label>
+              <select class="form-select" id="u-mentor">
+                <option value="">— Select Mentor —</option>
+              </select>
             </div>
           </div>
           <div class="form-group" id="u-parent-wrap" style="display:none">
@@ -591,9 +605,15 @@
       const parentWrap = document.getElementById('u-parent-wrap');
       const courseWrap = document.getElementById('u-course-wrap');
       const studentParentWrap = document.getElementById('u-student-parent-wrap');
+      const studentAllocRow = document.getElementById('u-student-allocations-row');
+
       if (parentWrap) parentWrap.style.display = role === 'parent' ? 'block' : 'none';
       if (courseWrap) courseWrap.style.display = role === 'student' ? 'block' : 'none';
       if (studentParentWrap) studentParentWrap.style.display = role === 'student' ? 'block' : 'none';
+      if (studentAllocRow) {
+        studentAllocRow.style.display = role === 'student' ? 'grid' : 'none';
+        if (role === 'student') populateClassesAndMentors();
+      }
     }
 
     function populateCourses() {
@@ -602,6 +622,33 @@
       if (!courseSelect) return;
       const courses = deptId ? DB.Courses.getByDepartment(deptId) : [];
       courseSelect.innerHTML = `<option value="">— Select Course —</option>` + courses.map(c => `<option value="${c.id}">${c.name} (${c.semesterCount} sem)</option>`).join('');
+      populateClassesAndMentors();
+    }
+
+    function populateClassesAndMentors() {
+      const deptId = document.getElementById('u-dept')?.value;
+      const courseId = document.getElementById('u-course')?.value;
+      const classSelect = document.getElementById('u-class');
+      const mentorSelect = document.getElementById('u-mentor');
+      if (!classSelect || !mentorSelect) return;
+
+      // Populate classes
+      let classes = DB.Classes.getAll();
+      if (courseId) {
+        classes = classes.filter(c => c.courseId === courseId);
+      } else if (deptId) {
+        classes = classes.filter(c => c.departmentId === deptId);
+      }
+      classSelect.innerHTML = `<option value="">— Select Class —</option>` + 
+        classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+
+      // Populate mentors
+      let faculty = DB.Users.getAll().filter(u => u.role === 'mentor' || u.role === 'hod');
+      if (deptId) {
+        faculty = faculty.filter(u => u.departmentId === deptId);
+      }
+      mentorSelect.innerHTML = `<option value="">— Select Mentor —</option>` + 
+        faculty.map(m => `<option value="${m.id}">${m.name}${m.departmentId ? ` · ${DB.Departments.getById(m.departmentId)?.name || ''}` : ''}</option>`).join('');
     }
 
     async function saveAddUser() {
@@ -617,8 +664,17 @@
 
       if (!name || !email || !role) { Toast.error('Missing fields', 'Name, email, and role are required.'); return; }
 
-      const result = await DB.Users.create({ name, email, role, departmentId: deptId, courseId, phone, parentEmail, linkedStudentId: linkedStudent?.id || null }, session.userId);
+      // Get student allocations
+      const classId = role === 'student' ? (document.getElementById('u-class')?.value || null) : null;
+      const mentorId = role === 'student' ? (document.getElementById('u-mentor')?.value || null) : null;
+
+      const result = await DB.Users.create({ name, email, role, departmentId: deptId, courseId, phone, parentEmail, linkedStudentId: linkedStudent?.id || null, classId }, session.userId);
       if (!result.ok) { Toast.error('Error', result.error); return; }
+
+      // Assign mentor if selected
+      if (role === 'student' && mentorId) {
+        DB.Assignments.assign(mentorId, result.user.id, session.userId);
+      }
 
       Modal.close('add-user');
       Toast.success('User created!', 'Account created with default password.');
@@ -645,6 +701,10 @@
       const user = DB.Users.getById(id);
       if (!user) return;
       const depts = DB.Departments.getAll();
+      const classes = DB.Classes.getAll();
+      const currentMentor = DB.Assignments.getMentor(id);
+      const faculty = DB.Users.getAll().filter(u => u.role === 'mentor' || u.role === 'hod');
+
       Modal.create('edit-user', {
         title: 'Edit User',
         body: `
@@ -674,6 +734,22 @@
             </select>
           </div>
           ${user.role === 'student' ? `
+          <div class="form-grid">
+            <div class="form-group">
+              <label class="form-label">Class</label>
+              <select class="form-select" id="eu-class">
+                <option value="">— None —</option>
+                ${classes.map(c => `<option value="${c.id}" ${user.classId === c.id ? 'selected' : ''}>${c.name}</option>`).join('')}
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Mentor</label>
+              <select class="form-select" id="eu-mentor">
+                <option value="">— None —</option>
+                ${faculty.map(f => `<option value="${f.id}" ${currentMentor === f.id ? 'selected' : ''}>${f.name}${f.departmentId ? ` · ${DB.Departments.getById(f.departmentId)?.name || ''}` : ''}</option>`).join('')}
+              </select>
+            </div>
+          </div>
           <div class="form-group">
             <label class="form-label">Parent Email</label>
             <input type="email" class="form-input" id="eu-parent-email" value="${user.parentEmail || ''}" placeholder="parent.email@gmail.com">
@@ -714,6 +790,22 @@
         // keep linked parent account email in sync (only when a value is provided)
         if (patch.parentEmail) DB.ParentLinks.setParentEmail(id, patch.parentEmail, session.userId);
       }
+
+      // Save student allocations
+      if (role === 'student') {
+        patch.classId = document.getElementById('eu-class')?.value || null;
+        const mentorId = document.getElementById('eu-mentor')?.value || null;
+        if (mentorId) {
+          DB.Assignments.assign(mentorId, id, session.userId);
+        } else {
+          // If "None" is selected, remove assignment
+          const currentMentor = DB.Assignments.getMentor(id);
+          if (currentMentor) {
+            DB.Assignments.unassign(currentMentor, id, session.userId);
+          }
+        }
+      }
+
       DB.Users.update(id, patch, session.userId);
       Toast.success('Updated', 'User details updated.');
       Modal.close('edit-user');

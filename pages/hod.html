@@ -112,6 +112,10 @@
             <button class="nav-item" id="nav-students" onclick="navigate('students')">${Icons.users}<span class="nav-item-text">Students</span></button>
           </div>
           <div class="nav-section">
+            <div class="nav-section-label">Mentorship</div>
+            <button class="nav-item" id="nav-mentorship" onclick="window.location.href='mentor.html'">${Icons.user}<span class="nav-item-text">My Mentees</span></button>
+          </div>
+          <div class="nav-section">
             <div class="nav-section-label">System</div>
             <button class="nav-item" id="nav-settings" onclick="showProfileSettings()">${Icons.settings}<span class="nav-item-text">Profile & Settings</span></button>
           </div>
@@ -272,23 +276,26 @@
       return bestN > 0 ? best : null;
     }
 
+    function scopedClasses() {
+      return DB.Classes.getAll().filter(c => isPrincipal || c.departmentId === session.departmentId);
+    }
+
     function renderClasses(container) {
-      const courses = scopedCourses();
-      const students = scopedStudents();
+      const classes = scopedClasses();
       container.innerHTML = `
-        <div class="page-header"><h1 class="page-title">Classes</h1><p class="page-subtitle">${courses.length} class(es).</p></div>
+        <div class="page-header"><h1 class="page-title">Classes</h1><p class="page-subtitle">${classes.length} class(es).</p></div>
         <div class="class-grid">
-          ${courses.map(c => {
-            const cs = students.filter(s => s.courseId === c.id);
+          ${classes.map(c => {
+            const cs = DB.Classes.getStudents(c.id);
             const g = genderCounts(cs);
-            const inc = classIncharge(c);
+            const inc = c.inchargeId ? DB.Users.getById(c.inchargeId) : null;
             const dept = DB.Departments.getById(c.departmentId);
             return `<div class="section-card class-card" onclick="openClass('${c.id}')">
               <div class="section-card-body">
                 <div style="display:flex;justify-content:space-between;align-items:start">
                   <div>
                     <div class="font-semibold">${c.name}</div>
-                    <div class="text-xs text-muted">${dept?.name || ''} · ${c.semesterCount} sem</div>
+                    <div class="text-xs text-muted">${dept?.name || ''} · ${c.durationYears} yrs</div>
                   </div>
                   <button class="btn btn-secondary btn-sm btn-icon" onclick="event.stopPropagation();editClass('${c.id}')" title="Edit class">${Icons.edit}</button>
                 </div>
@@ -306,22 +313,278 @@
         </div>`;
     }
 
-    function openClass(courseId) {
+    function openClass(classId) {
       const render = () => {
-        selectedClassId = courseId;
-        const course = DB.Courses.getById(courseId);
-        const students = scopedStudents().filter(s => s.courseId === courseId);
-        document.getElementById('breadcrumb-current').textContent = `Class: ${course?.name || ''}`;
+        selectedClassId = classId;
+        const cls = DB.Classes.getById(classId);
+        const students = DB.Classes.getStudents(classId).filter(s => isPrincipal || s.departmentId === session.departmentId);
+        document.getElementById('breadcrumb-current').textContent = `Class: ${cls?.name || ''}`;
         const container = document.getElementById('page-content');
+        
         container.innerHTML = `
           <button class="btn btn-secondary btn-sm back-btn" onclick="navigate('classes')">${Icons.chevronLeft} Back to Classes</button>
-          <div class="page-header"><h1 class="page-title">${course?.name || 'Class'}</h1><p class="page-subtitle">${students.length} students · ${course?.semesterCount} semesters</p></div>
-          <div class="section-card"><div class="table-wrapper"><table class="data-table">
-            <thead><tr><th>Student</th><th>Roll No</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
-            <tbody>${students.map(s => rowForStudent(s)).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>'}</tbody>
-          </table></div></div>`;
+          
+          <div class="page-header">
+            <div style="display:flex;justify-content:space-between;align-items:center;width:100%;flex-wrap:wrap;gap:var(--space-3)">
+              <div>
+                <h1 class="page-title">${cls?.name || 'Class'}</h1>
+                <p class="page-subtitle">${students.length} students · Year ${cls?.currentYear} / ${cls?.durationYears}</p>
+              </div>
+              <button class="btn btn-primary btn-sm hover-lift press-scale" onclick="showAddStudentsModal('${classId}')">
+                ${Icons.plus} Add Students
+              </button>
+            </div>
+          </div>
+
+          <!-- Bulk Actions Toolbar -->
+          <div id="bulk-actions-toolbar" class="bulk-toolbar" style="display:none;margin-bottom:var(--space-4);background:var(--bg-surface-2);padding:var(--space-3) var(--space-4);border-radius:var(--border-radius-md);border-left:4px solid var(--brand-primary);align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
+            <div class="text-sm font-semibold"><span id="selected-count">0</span> students selected</div>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm" onclick="bulkMoveClass()">${Icons.grid} Move Class</button>
+              <button class="btn btn-secondary btn-sm" onclick="bulkAssignMentor()">${Icons.user} Assign Mentor</button>
+              <button class="btn btn-secondary btn-sm text-warning" onclick="bulkRemoveFromClass()">${Icons.x} Remove from Class</button>
+              <button class="btn btn-danger btn-sm" onclick="bulkDeleteStudents()">${Icons.trash} Delete</button>
+            </div>
+          </div>
+          
+          <div class="section-card">
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th style="width:40px"><input type="checkbox" id="select-all-class" onclick="toggleSelectAllClass(this.checked)"></th>
+                    <th>Student</th>
+                    <th>Roll No</th>
+                    <th>Attendance (Current Sem)</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${students.map(s => rowForClassStudent(s)).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>`;
       };
       Motion.transition(document.getElementById('page-content'), render);
+    }
+
+    function rowForClassStudent(s) {
+      const profile = DB.Profiles.get(s.id) || {};
+      return `<tr>
+        <td><input type="checkbox" class="student-select-cb" data-id="${s.id}" onchange="updateBulkToolbar()"></td>
+        <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
+        <td class="text-sm">${Str.escHtml(profile.rollNo || '—')}</td>
+        <td>${currentSemAttendance(s.id)}</td>
+        <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
+        <td><div class="flex gap-2">
+          <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="StudentReport.show('${s.id}','${session.role}')">${Icons.fileText} Report</button>
+          <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="editStudentUser('${s.id}')" title="Edit">${Icons.edit}</button>
+          <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="transferStudent('${s.id}')" title="Transfer">${Icons.link}</button>
+          ${parentApprovalBtn(s)}
+        </div></td>
+      </tr>`;
+    }
+
+    function toggleSelectAllClass(checked) {
+      document.querySelectorAll('.student-select-cb').forEach(cb => {
+        cb.checked = checked;
+      });
+      updateBulkToolbar();
+    }
+
+    function updateBulkToolbar() {
+      const checked = [...document.querySelectorAll('.student-select-cb')].filter(cb => cb.checked);
+      const toolbar = document.getElementById('bulk-actions-toolbar');
+      const countLabel = document.getElementById('selected-count');
+      if (toolbar && countLabel) {
+        if (checked.length > 0) {
+          toolbar.style.display = 'flex';
+          countLabel.textContent = checked.length;
+        } else {
+          toolbar.style.display = 'none';
+          const selectAll = document.getElementById('select-all-class');
+          if (selectAll) selectAll.checked = false;
+        }
+      }
+    }
+
+    function getSelectedStudentIds() {
+      return [...document.querySelectorAll('.student-select-cb')].filter(cb => cb.checked).map(cb => cb.dataset.id);
+    }
+
+    function bulkMoveClass() {
+      const ids = getSelectedStudentIds();
+      if (!ids.length) return;
+      const classes = DB.Classes.getAll().filter(c => isPrincipal || c.departmentId === session.departmentId);
+      Modal.create('bulk-move', {
+        title: `Move ${ids.length} Students`, size: 'sm',
+        body: `
+          <div class="form-group">
+            <label class="form-label required">Select New Class</label>
+            <select class="form-select" id="bm-class">
+              <option value="">— Select Class —</option>
+              ${classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('')}
+            </select>
+          </div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('bulk-move')">Cancel</button>
+                 <button class="btn btn-primary" onclick="doBulkMoveClass()">Move</button>`,
+      });
+    }
+
+    function doBulkMoveClass() {
+      const classId = document.getElementById('bm-class').value;
+      if (!classId) { Toast.error('Select a class'); return; }
+      const ids = getSelectedStudentIds();
+      const cls = DB.Classes.getById(classId);
+      ids.forEach(id => {
+        DB.Users.update(id, { classId, courseId: cls?.courseId, departmentId: cls?.departmentId }, session.userId);
+      });
+      Toast.success('Moved', `${ids.length} students moved to ${cls.name}.`);
+      Modal.close('bulk-move');
+      openClass(selectedClassId);
+    }
+
+    function bulkAssignMentor() {
+      const ids = getSelectedStudentIds();
+      if (!ids.length) return;
+      const faculty = DB.Users.getAll().filter(u => (u.role === 'mentor' || u.role === 'hod') && (isPrincipal || u.departmentId === session.departmentId));
+      Modal.create('bulk-assign', {
+        title: `Assign Mentor to ${ids.length} Students`, size: 'sm',
+        body: `
+          <div class="form-group">
+            <label class="form-label required">Select Mentor</label>
+            <select class="form-select" id="ba-mentor">
+              <option value="">— Select Mentor —</option>
+              ${faculty.map(f => `<option value="${f.id}">${f.name} (${roleLabel(f.role)})</option>`).join('')}
+            </select>
+          </div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('bulk-assign')">Cancel</button>
+                 <button class="btn btn-primary" onclick="doBulkAssignMentor()">Assign</button>`,
+      });
+    }
+
+    function doBulkAssignMentor() {
+      const mentorId = document.getElementById('ba-mentor').value;
+      if (!mentorId) { Toast.error('Select a mentor'); return; }
+      const ids = getSelectedStudentIds();
+      const mentor = DB.Users.getById(mentorId);
+      ids.forEach(id => {
+        DB.Assignments.assign(mentorId, id, session.userId);
+      });
+      Toast.success('Assigned', `${ids.length} students assigned to ${mentor.name}.`);
+      Modal.close('bulk-assign');
+      openClass(selectedClassId);
+    }
+
+    function bulkRemoveFromClass() {
+      const ids = getSelectedStudentIds();
+      if (!ids.length) return;
+      Modal.confirm({
+        title: `Remove ${ids.length} Students`,
+        message: `Are you sure you want to remove these ${ids.length} students from this class? Their course details will be unlinked.`,
+        confirmText: 'Remove',
+        confirmClass: 'btn-danger',
+        onConfirm: () => {
+          ids.forEach(id => {
+            DB.Users.update(id, { classId: null }, session.userId);
+          });
+          Toast.success('Removed', `${ids.length} students removed from class.`);
+          openClass(selectedClassId);
+        }
+      });
+    }
+
+    function bulkDeleteStudents() {
+      const ids = getSelectedStudentIds();
+      if (!ids.length) return;
+      Modal.confirm({
+        title: `Delete ${ids.length} Students`,
+        message: `This will permanently delete these ${ids.length} student accounts and all their records from the system. This cannot be undone.`,
+        confirmText: 'Delete Permanently',
+        confirmClass: 'btn-danger',
+        onConfirm: () => {
+          ids.forEach(id => {
+            DB.Users.delete(id, session.userId);
+          });
+          Toast.success('Deleted', `${ids.length} student accounts deleted.`);
+          openClass(selectedClassId);
+        }
+      });
+    }
+
+    function showAddStudentsModal(classId) {
+      const cls = DB.Classes.getById(classId);
+      const allStudents = DB.Users.getAll().filter(u => u.role === 'student' && u.classId !== classId && (isPrincipal || u.departmentId === session.departmentId));
+      
+      Modal.create('add-students', {
+        title: `Add Students to ${cls?.name || 'Class'}`, size: 'md',
+        body: `
+          <div class="form-group">
+            <input type="text" class="form-input" id="as-search" placeholder="Search students by name or email..." oninput="filterAddStudents()">
+          </div>
+          <div style="max-height:300px;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--border-radius-md);margin-top:var(--space-3)">
+            <table class="data-table" style="font-size:13px">
+              <thead>
+                <tr>
+                  <th style="width:40px"><input type="checkbox" id="as-select-all" onclick="toggleSelectAllAdd(this.checked)"></th>
+                  <th>Student Name</th>
+                  <th>Current Class</th>
+                </tr>
+              </thead>
+              <tbody id="as-tbody">
+                ${allStudents.map(s => {
+                  const currentCls = s.classId ? DB.Classes.getById(s.classId) : null;
+                  return `<tr class="as-row" data-name="${s.name.toLowerCase()}" data-email="${s.email.toLowerCase()}">
+                    <td><input type="checkbox" class="as-student-cb" data-id="${s.id}"></td>
+                    <td>
+                      <div class="font-semibold">${Str.escHtml(s.name)}</div>
+                      <div class="text-xs text-muted">${Str.escHtml(s.email)}</div>
+                    </td>
+                    <td>${currentCls ? `<span class="badge badge-blue">${Str.escHtml(currentCls.name)}</span>` : '<span class="text-muted">None</span>'}</td>
+                  </tr>`;
+                }).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-tertiary);padding:var(--space-4)">No students available to add.</td></tr>`}
+              </tbody>
+            </table>
+          </div>`,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('add-students')">Cancel</button>
+                 <button class="btn btn-primary" onclick="doAddStudents('${classId}')">Add Selected</button>`,
+      });
+    }
+
+    function toggleSelectAllAdd(checked) {
+      document.querySelectorAll('.as-student-cb').forEach(cb => {
+        cb.checked = checked;
+      });
+    }
+
+    function filterAddStudents() {
+      const query = document.getElementById('as-search').value.toLowerCase();
+      document.querySelectorAll('.as-row').forEach(row => {
+        const name = row.dataset.name;
+        const email = row.dataset.email;
+        if (name.includes(query) || email.includes(query)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    function doAddStudents(classId) {
+      const checkedCbs = [...document.querySelectorAll('.as-student-cb')].filter(cb => cb.checked);
+      if (!checkedCbs.length) { Toast.error('Select at least one student'); return; }
+      
+      const cls = DB.Classes.getById(classId);
+      checkedCbs.forEach(cb => {
+        const studentId = cb.dataset.id;
+        DB.Users.update(studentId, { classId, courseId: cls?.courseId, departmentId: cls?.departmentId }, session.userId);
+      });
+
+      Toast.success('Success', `${checkedCbs.length} students added to class.`);
+      Modal.close('add-students');
+      openClass(classId);
     }
 
     function currentSemAttendance(studentId, returnVal = false) {
@@ -440,8 +703,8 @@
     // ── Transfer student to another Teacher / Class ──────────────
     function transferStudent(studentId) {
       const s = DB.Users.getById(studentId);
-      const faculty = DB.Users.getAll().filter(u => u.role === 'mentor');
-      const classes = DB.Classes.getAll();
+      const faculty = DB.Users.getAll().filter(u => (u.role === 'mentor' || u.role === 'hod') && (isPrincipal || u.departmentId === session.departmentId));
+      const classes = DB.Classes.getAll().filter(c => isPrincipal || c.departmentId === session.departmentId);
       const currentMentor = DB.Assignments.getMentor(studentId);
       Modal.create('transfer', {
         title: `Transfer — ${s.name}`, size: 'sm',
@@ -449,7 +712,7 @@
           <div class="form-group"><label class="form-label">Assign to Teacher (Mentor)</label>
             <select class="form-select" id="tr-mentor">
               <option value="">— Keep current —</option>
-              ${faculty.map(m => `<option value="${m.id}" ${currentMentor===m.id?'selected':''}>${m.name}${m.departmentId?` · ${DB.Departments.getById(m.departmentId)?.name||''}`:''}</option>`).join('')}
+              ${faculty.map(m => `<option value="${m.id}" ${currentMentor===m.id?'selected':''}>${m.name} (${roleLabel(m.role)})</option>`).join('')}
             </select>
           </div>
           <div class="form-group"><label class="form-label">Move to Class</label>

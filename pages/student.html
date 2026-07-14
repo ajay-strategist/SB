@@ -92,6 +92,8 @@
     let session;
     let activeSection = 'dashboard';
     let currentRecordSemester = 1;
+    let isEditingRecord = false;
+    let isEditingSubjects = false;
 
     window.addEventListener('DOMContentLoaded', async () => {
       await DB.init();
@@ -421,6 +423,8 @@
 
     function switchRecordSemester(sem) {
       currentRecordSemester = sem;
+      isEditingRecord = false;
+      isEditingSubjects = false;
       renderSemesterDetail();
     }
 
@@ -431,31 +435,88 @@
 
       detailContainer.innerHTML = `
         <div class="section-card mb-6">
-          <div class="section-card-header"><div class="section-card-title">Performance Record — Semester ${currentRecordSemester}</div></div>
+          <div class="section-card-header">
+            <div class="section-card-title">Performance Record — Semester ${currentRecordSemester}</div>
+            ${!isEditingRecord ? `<button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="startRecordEdit()">${Icons.edit} Edit Record</button>` : ''}
+          </div>
           <div class="section-card-body">
-            <div class="form-grid">
-              <div class="form-group"><label class="form-label">Semester SGPA / Grade Point</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(record.gradePoint || '—')}</div></div>
-              <div class="form-group"><label class="form-label">Letter Grade</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(record.grade || '—')}</div></div>
-              <div class="form-group"><label class="form-label">Attendance Percentage (%)</label><div class="form-input" style="background:var(--bg-surface-2)">${record.attendance ? Str.escHtml(record.attendance) + '%' : '—'}</div></div>
+            ${isEditingRecord ? `
+              <form onsubmit="saveSemesterRecord(event)">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label class="form-label required">Semester SGPA / Grade Point</label>
+                    <input type="number" step="0.01" min="0" max="10" name="gradePoint" class="form-input" value="${record.gradePoint || ''}" placeholder="e.g. 8.45" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label required">Letter Grade</label>
+                    <input type="text" name="grade" class="form-input" value="${record.grade || ''}" placeholder="e.g. A+ or O" required>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label required">Attendance Percentage (%)</label>
+                    <input type="number" step="0.1" min="0" max="100" name="attendance" class="form-input" value="${record.attendance || ''}" placeholder="e.g. 92.4" required>
+                  </div>
+                </div>
+                <div style="display:flex;gap:var(--space-2);margin-top:var(--space-4)">
+                  <button type="submit" class="btn btn-primary">Save Changes</button>
+                  <button type="button" class="btn btn-secondary" onclick="cancelRecordEdit()">Cancel</button>
+                </div>
+              </form>
+            ` : `
+              <div class="form-grid">
+                <div class="form-group"><label class="form-label">Semester SGPA / Grade Point</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(record.gradePoint || '—')}</div></div>
+                <div class="form-group"><label class="form-label">Letter Grade</label><div class="form-input" style="background:var(--bg-surface-2)">${Str.escHtml(record.grade || '—')}</div></div>
+                <div class="form-group"><label class="form-label">Attendance Percentage (%)</label><div class="form-input" style="background:var(--bg-surface-2)">${record.attendance ? Str.escHtml(record.attendance) + '%' : '—'}</div></div>
+              </div>
+            `}
+            <div class="form-group" style="margin-top:var(--space-4)">
+              <label class="form-label">Mentor Remarks</label>
+              <div class="form-textarea" style="background:var(--bg-surface-2);min-height:unset;padding:var(--space-3)">${Str.escHtml(record.remarks || 'No remarks added.')}</div>
             </div>
-            <div class="form-group"><label class="form-label">Mentor Remarks</label><div class="form-textarea" style="background:var(--bg-surface-2);min-height:unset;padding:var(--space-3)">${Str.escHtml(record.remarks || 'No remarks added.')}</div></div>
           </div>
         </div>
 
         <div class="section-card mb-6">
-          <div class="section-card-header"><div class="section-card-title">${Icons.fileText} Subject-wise Details — Semester ${currentRecordSemester}</div></div>
-          <div class="section-card-body" style="padding:0"><div class="table-wrapper"><table class="data-table">
-            ${(() => {
-              const cfg = DB.CourseConfig.get(session.courseId);
-              const cols = [...Array.from({length: cfg.numInternals||1}, (_,i)=>`Internal ${i+1}`), ...((cfg.components||[]).filter(c=>!/^internal/i.test(c)))];
-              const head = `<thead><tr><th>Subject</th><th>Attendance %</th>${cols.map(c=>`<th>${c}</th>`).join('')}<th>External</th><th>Grade</th></tr></thead>`;
-              const body = `<tbody>${(record.subjects || []).map(su => {
-                const marks = su.marks || (su.internal!=null ? {'Internal 1': su.internal} : {});
-                return `<tr><td>${Str.escHtml(su.name||'—')}</td><td>${Str.escHtml(su.attendance ?? '—')}</td>${cols.map(c=>`<td>${Str.escHtml(marks[c] ?? '—')}</td>`).join('')}<td>${Str.escHtml(su.external ?? '—')}</td><td>${Str.escHtml(su.grade||'—')}</td></tr>`;
-              }).join('') || `<tr><td colspan="${cols.length+4}" style="text-align:center;color:var(--text-tertiary)">No subject-wise details added for this semester yet.</td></tr>`}</tbody>`;
-              return head + body;
-            })()}
-          </table></div></div>
+          <div class="section-card-header">
+            <div class="section-card-title">${Icons.fileText} Subject-wise Details — Semester ${currentRecordSemester}</div>
+            ${!isEditingSubjects ? `
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="startSubjectsEdit()">${Icons.edit} Edit Subjects</button>
+            ` : `
+              <div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm" onclick="addSubjectRow()">${Icons.plus} Add Subject</button>
+              </div>
+            `}
+          </div>
+          <div class="section-card-body" style="padding:0">
+            <div class="table-wrapper">
+              <table class="data-table" id="subjects-table">
+                ${(() => {
+                  const cfg = DB.CourseConfig.get(session.courseId);
+                  const cols = [...Array.from({length: cfg.numInternals||1}, (_,i)=>`Internal ${i+1}`), ...((cfg.components||[]).filter(c=>!/^internal/i.test(c)))];
+                  const head = `<thead><tr><th>Subject</th><th>Attendance %</th>${cols.map(c=>`<th>${c}</th>`).join('')}<th>External</th><th>Grade</th>${isEditingSubjects ? '<th></th>' : ''}</tr></thead>`;
+                  
+                  let body = '';
+                  if (isEditingSubjects) {
+                    body = `<tbody id="subjects-tbody">
+                      ${(record.subjects || []).map(su => subjectRowHTML(su)).join('') || ''}
+                    </tbody>`;
+                  } else {
+                    body = `<tbody>${(record.subjects || []).map(su => {
+                      const marks = su.marks || (su.internal!=null ? {'Internal 1': su.internal} : {});
+                      return `<tr><td>${Str.escHtml(su.name||'—')}</td><td>${Str.escHtml(su.attendance ?? '—')}</td>${cols.map(c=>`<td>${Str.escHtml(marks[c] ?? '—')}</td>`).join('')}<td>${Str.escHtml(su.external ?? '—')}</td><td>${Str.escHtml(su.grade||'—')}</td></tr>`;
+                    }).join('') || `<tr><td colspan="${cols.length+4}" style="text-align:center;color:var(--text-tertiary)">No subject-wise details added for this semester yet.</td></tr>`}</tbody>`;
+                  }
+                  
+                  return head + body;
+                })()}
+              </table>
+            </div>
+            ${isEditingSubjects ? `
+              <div style="padding:var(--space-4);display:flex;gap:var(--space-2)">
+                <button class="btn btn-primary btn-sm" onclick="saveSubjects()">Save Changes</button>
+                <button class="btn btn-secondary btn-sm" onclick="cancelSubjectsEdit()">Cancel</button>
+              </div>
+            ` : ''}
+          </div>
         </div>
 
         <div class="section-card">
@@ -477,6 +538,135 @@
             </div>
           </div>
         </div>`;
+    }
+
+    function componentColumns() {
+      const cfg = DB.CourseConfig.get(session.courseId);
+      const internals = Array.from({ length: cfg.numInternals || 1 }, (_, i) => `Internal ${i + 1}`);
+      const others = (cfg.components || []).filter(c => !/^internal/i.test(c));
+      return [...internals, ...others];
+    }
+
+    function subjectRowHTML(su = {}) {
+      const cols = componentColumns();
+      const marks = { ...(su.marks || {}) };
+      if (su.internal != null && su.internal !== '' && marks['Internal 1'] == null) marks['Internal 1'] = su.internal;
+      return `<tr>
+        <td><input class="form-input" data-f="name" value="${su.name ? Str.escHtml(su.name) : ''}" placeholder="Subject" required></td>
+        <td><input class="form-input" type="number" data-f="attendance" value="${su.attendance ?? ''}" style="max-width:90px"></td>
+        ${cols.map(c => `<td><input class="form-input" type="number" data-comp="${Str.escHtml(c)}" value="${marks[c] ?? ''}" style="max-width:90px"></td>`).join('')}
+        <td><input class="form-input" type="number" data-f="external" value="${su.external ?? ''}" style="max-width:90px"></td>
+        <td><input class="form-input" data-f="grade" value="${su.grade ? Str.escHtml(su.grade) : ''}" style="max-width:80px"></td>
+        <td><button class="btn btn-ghost btn-sm btn-icon" onclick="this.closest('tr').remove()">${Icons.trash}</button></td>
+      </tr>`;
+    }
+
+    function addSubjectRow() {
+      const tbody = document.getElementById('subjects-tbody');
+      if (tbody) {
+        tbody.insertAdjacentHTML('beforeend', subjectRowHTML());
+      }
+    }
+
+    function startRecordEdit() {
+      isEditingRecord = true;
+      renderSemesterDetail();
+    }
+
+    function cancelRecordEdit() {
+      isEditingRecord = false;
+      renderSemesterDetail();
+    }
+
+    function startSubjectsEdit() {
+      isEditingSubjects = true;
+      renderSemesterDetail();
+    }
+
+    function cancelSubjectsEdit() {
+      isEditingSubjects = false;
+      renderSemesterDetail();
+    }
+
+    function saveSemesterRecord(e) {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const data = Object.fromEntries(fd.entries());
+      
+      const rec = DB.SemesterRecords.get(session.userId, currentRecordSemester) || {};
+      
+      const updated = {
+        ...rec,
+        gradePoint: parseFloat(data.gradePoint) || 0,
+        grade: data.grade.trim(),
+        attendance: parseFloat(data.attendance) || 0,
+      };
+
+      DB.SemesterRecords.save(session.userId, currentRecordSemester, updated, session.userId);
+      
+      const mentorId = DB.Assignments.getMentor(session.userId);
+      if (mentorId) {
+        DB.Notifications.create(
+          mentorId, 
+          'Academic Record Updated', 
+          `${session.name} updated their Semester ${currentRecordSemester} academic record. SGPA: ${updated.gradePoint}, Attendance: ${updated.attendance}%`, 
+          'info'
+        );
+        
+        if (updated.attendance < 75) {
+          DB.Notifications.create(
+            mentorId, 
+            'Low Attendance Alert (Student Update)', 
+            `${session.name}'s updated attendance fell to ${updated.attendance}% in Sem ${currentRecordSemester}`, 
+            'warning'
+          );
+        }
+      }
+
+      Toast.success('Saved', 'Performance record updated.');
+      isEditingRecord = false;
+      renderAcademic(document.getElementById('page-content'));
+    }
+
+    function saveSubjects() {
+      const rows = [...document.querySelectorAll('#subjects-tbody tr')];
+      const subjects = rows.map(tr => {
+        const nameEl = tr.querySelector(`[data-f="name"]`);
+        const name = nameEl ? nameEl.value.trim() : '';
+        const attEl = tr.querySelector(`[data-f="attendance"]`);
+        const attendance = attEl ? attEl.value.trim() : '';
+        const extEl = tr.querySelector(`[data-f="external"]`);
+        const external = extEl ? extEl.value.trim() : '';
+        const grdEl = tr.querySelector(`[data-f="grade"]`);
+        const grade = grdEl ? grdEl.value.trim() : '';
+
+        const marks = {};
+        tr.querySelectorAll('[data-comp]').forEach(inp => {
+          if (inp.value.trim() !== '') {
+            marks[inp.dataset.comp] = inp.value.trim();
+          }
+        });
+        const internal = marks['Internal 1'] ?? ''; 
+        return { name, attendance, marks, internal, external, grade };
+      }).filter(s => s.name);
+
+      const rec = DB.SemesterRecords.get(session.userId, currentRecordSemester) || {};
+      const updated = { ...rec, subjects };
+      DB.SemesterRecords.save(session.userId, currentRecordSemester, updated, session.userId);
+
+      const mentorId = DB.Assignments.getMentor(session.userId);
+      if (mentorId) {
+        DB.Notifications.create(
+          mentorId, 
+          'Subjects Updated by Student', 
+          `${session.name} updated subject-wise marks/attendance for Semester ${currentRecordSemester}.`, 
+          'info'
+        );
+      }
+
+      Toast.success('Saved', 'Subject-wise report updated.');
+      isEditingSubjects = false;
+      renderAcademic(document.getElementById('page-content'));
     }
 
     // ── Co-Curricular Extra Page ─────────────────────────────────
