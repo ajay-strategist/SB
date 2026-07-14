@@ -516,7 +516,7 @@
 
     function showAddStudentsModal(classId) {
       const cls = DB.Classes.getById(classId);
-      const allStudents = DB.Users.getAll().filter(u => u.role === 'student' && u.classId !== classId && (isPrincipal || u.departmentId === session.departmentId));
+      const allStudents = DB.Users.getAll().filter(u => u.role === 'student' && u.classId !== classId);
       
       Modal.create('add-students', {
         title: `Add Students to ${cls?.name || 'Class'}`, size: 'md',
@@ -740,27 +740,52 @@
     }
 
     // ── Edit class (course) ──────────────────────────────────────
-    function editClass(courseId) {
-      const c = DB.Courses.getById(courseId);
-      const depts = DB.Departments.getAll();
+    // ── Edit class ──────────────────────────────────────
+    function editClass(classId) {
+      const cls = DB.Classes.getById(classId);
+      const courses = DB.Courses.getAll().filter(c => isPrincipal || c.departmentId === session.departmentId);
+      const faculty = DB.Users.getAll().filter(u => (u.role === 'mentor' || u.role === 'hod') && (isPrincipal || u.departmentId === session.departmentId));
+      const [mm, dd] = (cls?.promotionDate || '06-01').split('-');
       Modal.create('edit-class', {
-        title: `Edit Class — ${c.name}`, size: 'sm',
+        title: `Edit Class — ${cls?.name || ''}`, size: 'md',
         body: `
-          <div class="form-group"><label class="form-label required">Class / Course Name</label><input class="form-input" id="ec-name" value="${c.name}"></div>
-          <div class="form-group"><label class="form-label">Department</label>
-            <select class="form-select" id="ec-dept">${depts.map(d => `<option value="${d.id}" ${c.departmentId===d.id?'selected':''}>${d.name}</option>`).join('')}</select>
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label required">Year</label>
+              <select class="form-select" id="ec-year">${[1,2,3,4,5,6].map(y=>`<option value="${y}" ${cls?.currentYear===y?'selected':''}>${y}</option>`).join('')}</select>
+            </div>
+            <div class="form-group"><label class="form-label required">Course</label>
+              <select class="form-select" id="ec-course">${courses.map(c=>`<option value="${c.id}" data-code="${c.code||''}" ${cls?.courseId===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+            </div>
+            <div class="form-group"><label class="form-label required">Batch</label>
+              <select class="form-select" id="ec-batch">${['A','B','C','D'].map(b=>`<option value="${b}" ${cls?.batch===b?'selected':''}>${b}</option>`).join('')}</select>
+            </div>
           </div>
-          <div class="form-group"><label class="form-label required">Number of Semesters</label><input type="number" class="form-input" id="ec-sems" value="${c.semesterCount}" min="1" max="20"></div>`,
+          <div class="form-grid">
+            <div class="form-group"><label class="form-label required">Course Duration (years)</label><input type="number" class="form-input" id="ec-dur" value="${cls?.durationYears||3}" min="1" max="6"></div>
+            <div class="form-group"><label class="form-label">Promotion Date</label><input type="date" class="form-input" id="ec-promo" value="2026-${mm}-${dd}"></div>
+            <div class="form-group"><label class="form-label">Class In-charge</label>
+              <select class="form-select" id="ec-incharge"><option value="">— None —</option>${faculty.map(f=>`<option value="${f.id}" ${cls?.inchargeId===f.id?'selected':''}>${f.name} (${roleLabel(f.role)})</option>`).join('')}</select>
+            </div>
+          </div>`,
         footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-class')">Cancel</button>
-                 <button class="btn btn-primary" onclick="saveClass('${courseId}')">Save</button>`,
+                 <button class="btn btn-primary" onclick="saveClass('${classId}')">Save</button>`,
       });
     }
-    function saveClass(courseId) {
-      const name = document.getElementById('ec-name').value.trim();
-      const departmentId = document.getElementById('ec-dept').value;
-      const semesterCount = parseInt(document.getElementById('ec-sems').value);
-      if (!name || !semesterCount) { Toast.error('Missing fields'); return; }
-      DB.Courses.update(courseId, { name, departmentId, semesterCount }, session.userId);
+
+    function saveClass(classId) {
+      const year = document.getElementById('ec-year').value;
+      const courseSel = document.getElementById('ec-course');
+      const courseId = courseSel.value;
+      const courseCode = courseSel.options[courseSel.selectedIndex]?.dataset.code || '';
+      const batch = document.getElementById('ec-batch').value;
+      const durationYears = document.getElementById('ec-dur').value;
+      const promo = document.getElementById('ec-promo').value;
+      const promotionDate = promo ? promo.slice(5) : '06-01';
+      const inchargeId = document.getElementById('ec-incharge').value || null;
+      
+      const cls = DB.Classes.getById(classId);
+      const data = { currentYear: year, courseId, courseCode, batch, durationYears, promotionDate, inchargeId };
+      DB.Classes.update(classId, data, session.userId);
       Toast.success('Saved', 'Class updated.');
       Modal.close('edit-class');
       navigate('classes');

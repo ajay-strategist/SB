@@ -979,7 +979,7 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
     function showClassModal(id) {
       const cls = id ? DB.Classes.getById(id) : null;
       const courses = DB.Courses.getAll();
-      const faculty = DB.Users.getByRole('mentor');
+      const faculty = DB.Users.getAll().filter(u => u.role === 'mentor' || u.role === 'hod');
       const [mm, dd] = (cls?.promotionDate || '06-01').split('-');
       Modal.create('class', {
         title: cls ? 'Edit Class' : 'Add Class', size: 'md',
