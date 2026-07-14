@@ -347,6 +347,7 @@
 
     function rowForClassStudent(s) {
       const course = DB.Courses.getById(s.courseId);
+      const isMyMentee = DB.Assignments.getMentees(session.userId).includes(s.id);
       return `<tr>
         <td><input type="checkbox" class="student-select-cb" data-id="${s.id}" onchange="updateBulkToolbar()"></td>
         <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm">${Str.escHtml(s.name)}</span></div></td>
@@ -354,7 +355,7 @@
         <td>${currentSemAttendance(s.id)}</td>
         <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
         <td><div class="flex gap-2">
-          <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="viewMenteeFile('${s.id}')">${Icons.fileText} Report</button>
+          ${isMyMentee ? `<button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="viewMenteeFile('${s.id}')">${Icons.fileText} Report</button>` : ''}
           <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="editStudentIdentity('${s.id}')" title="Edit name & email">${Icons.edit}</button>
           <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="scheduleMeetingFor('${s.id}')" title="Schedule Meeting">${Icons.calendar}</button>
         </div></td>
@@ -793,6 +794,11 @@
     // ── Mentee File Viewer ────────────────────────────────────────
     let menteeOrigin = 'dashboard';
     function viewMenteeFile(studentId) {
+      const myMenteeIds = DB.Assignments.getMentees(session.userId);
+      if (!myMenteeIds.includes(studentId)) {
+        Toast.error('Access Denied', 'You can only view files/reports of your assigned mentees.');
+        return;
+      }
       Motion.transition(document.getElementById('page-content'), () => {
         selectedStudentId = studentId;
         activeSubTab = 'profile';
