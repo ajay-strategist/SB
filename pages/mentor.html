@@ -492,7 +492,7 @@
 
     function showAddStudentsModal(classId) {
       const cls = DB.Classes.getById(classId);
-      const allStudents = DB.Users.getAll().filter(u => u.role === 'student' && u.classId !== classId);
+      const allStudents = DB.Users.getAll().filter(u => u.role === 'student' && u.classId !== classId && (u.departmentId === session.departmentId || !u.departmentId));
       
       Modal.create('add-students', {
         title: `Add Students to ${cls?.name || 'Class'}`, size: 'md',

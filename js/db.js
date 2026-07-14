@@ -325,13 +325,24 @@ const DB = (() => {
       return reconstructed;
     } else {
       const s = get('sb_session');
-      if (s && s.expiresAt > Date.now()) return s;
+      if (s && s.expiresAt > Date.now()) {
+        // Backfill departmentId/courseId if missing (sessions created before the fix)
+        if (s.departmentId === undefined) {
+          const u = findById(KEYS.users, s.userId);
+          if (u) {
+            s.departmentId = u.departmentId || null;
+            s.courseId = u.courseId || null;
+            set('sb_session', s);
+          }
+        }
+        return s;
+      }
       return null;
     }
   }
 
   function setCachedSession(user) {
-    cachedSession = { userId: user.id, role: user.role, name: user.name, email: user.email, expiresAt: Date.now() + 8 * 3600 * 1000 };
+    cachedSession = { userId: user.id, role: user.role, name: user.name, email: user.email, departmentId: user.departmentId || null, courseId: user.courseId || null, expiresAt: Date.now() + 8 * 3600 * 1000 };
     set('sb_session', cachedSession);
     return cachedSession;
   }
