@@ -596,6 +596,10 @@
             <label class="form-label">Parent Email (personal email of parent)</label>
             <input type="email" class="form-input" id="u-student-parent" placeholder="parent.email@gmail.com">
           </div>
+          <div class="form-group" id="u-regno-wrap" style="display:none">
+            <label class="form-label">Register Number (for Student role)</label>
+            <input type="text" class="form-input" id="u-regno" placeholder="e.g. REG/CS/2024/09">
+          </div>
           <div class="alert alert-info">${Icons.info} The user will be created with their email as the username and 'password' as the default password. They will be prompted to reset their password upon their first login.</div>`,
         footer: `<button class="btn btn-secondary" onclick="Modal.close('add-user')">Cancel</button>
                  <button class="btn btn-primary" onclick="saveAddUser()">Create User</button>`,
@@ -608,10 +612,12 @@
       const programWrap = document.getElementById('u-program-wrap');
       const studentParentWrap = document.getElementById('u-student-parent-wrap');
       const studentAllocRow = document.getElementById('u-student-allocations-row');
+      const regnoWrap = document.getElementById('u-regno-wrap');
 
       if (parentWrap) parentWrap.style.display = role === 'parent' ? 'block' : 'none';
       if (programWrap) programWrap.style.display = role === 'student' ? 'block' : 'none';
       if (studentParentWrap) studentParentWrap.style.display = role === 'student' ? 'block' : 'none';
+      if (regnoWrap) regnoWrap.style.display = role === 'student' ? 'block' : 'none';
       if (studentAllocRow) {
         studentAllocRow.style.display = role === 'student' ? 'grid' : 'none';
         if (role === 'student') populateClassesAndMentors();
@@ -660,6 +666,7 @@
       const deptId = document.getElementById('u-dept')?.value || null;
       const programId = document.getElementById('u-program')?.value || null;
       const phone = document.getElementById('u-phone')?.value.trim() || null;
+      const registerNo = role === 'student' ? (document.getElementById('u-regno')?.value.trim() || null) : null;
       const parentEmail = role === 'student' ? (document.getElementById('u-student-parent')?.value.trim() || null) : null;
       const linkedStudentEmail = role === 'parent' ? (document.getElementById('u-parent-student')?.value.trim().toLowerCase() || null) : null;
       const linkedStudent = linkedStudentEmail ? DB.Users.getAll().find(u => u.email.toLowerCase() === linkedStudentEmail) : null;
@@ -670,7 +677,7 @@
       const classId = role === 'student' ? (document.getElementById('u-class')?.value || null) : null;
       const mentorId = role === 'student' ? (document.getElementById('u-mentor')?.value || null) : null;
 
-      const result = await DB.Users.create({ name, email, role, departmentId: deptId, programId, phone, parentEmail, linkedStudentId: linkedStudent?.id || null, classId }, session.userId);
+      const result = await DB.Users.create({ name, email, role, departmentId: deptId, programId, phone, parentEmail, linkedStudentId: linkedStudent?.id || null, classId, registerNo }, session.userId);
       if (!result.ok) { Toast.error('Error', result.error); return; }
 
       // Assign mentor if selected
@@ -721,19 +728,22 @@
                 ${['admin','principal','hod','mentor','student','parent'].map(r => `<option value="${r}" ${user.role === r ? 'selected' : ''}>${roleLabel(r)}</option>`).join('')}
               </select>
             </div>
+            <div class="form-group"><label class="form-label">Phone Number</label><input type="tel" class="form-input" id="eu-phone" value="${user.phone || ''}" placeholder="9876543210"></div>
+          </div>
+          <div class="form-grid">
             <div class="form-group">
               <label class="form-label">Status</label>
               <select class="form-select" id="eu-status">
                 ${['active','suspended'].map(s => `<option value="${s}" ${user.status === s ? 'selected' : ''}>${Str.capitalize(s)}</option>`).join('')}
               </select>
             </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Department</label>
-            <select class="form-select" id="eu-dept">
-              <option value="">— None —</option>
-              ${depts.map(d => `<option value="${d.id}" ${user.departmentId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
-            </select>
+            <div class="form-group">
+              <label class="form-label">Department</label>
+              <select class="form-select" id="eu-dept">
+                <option value="">— None —</option>
+                ${depts.map(d => `<option value="${d.id}" ${user.departmentId === d.id ? 'selected' : ''}>${d.name}</option>`).join('')}
+              </select>
+            </div>
           </div>
           ${user.role === 'student' ? `
           <div class="form-grid">
@@ -751,6 +761,10 @@
                 ${faculty.map(f => `<option value="${f.id}" ${currentMentor === f.id ? 'selected' : ''}>${f.name}${f.departmentId ? ` · ${DB.Departments.getById(f.departmentId)?.name || ''}` : ''}</option>`).join('')}
               </select>
             </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Register Number</label>
+            <input type="text" class="form-input" id="eu-regno" value="${Str.escHtml(DB.Profiles.get(id)?.registerNo || '')}" placeholder="e.g. REG/CS/2024/09">
           </div>
           <div class="form-group">
             <label class="form-label">Parent Email</label>
@@ -783,8 +797,9 @@
       const role = document.getElementById('eu-role')?.value;
       const status = document.getElementById('eu-status')?.value;
       const deptId = document.getElementById('eu-dept')?.value || null;
+      const phone = document.getElementById('eu-phone')?.value.trim() || null;
       if (!name) { Toast.error('Name required'); return; }
-      const patch = { name, role, status, departmentId: deptId };
+      const patch = { name, role, status, departmentId: deptId, phone };
       const parentEmailEl = document.getElementById('eu-parent-email');
       if (parentEmailEl) {
         patch.parentEmail = parentEmailEl.value.trim().toLowerCase() || null;
@@ -797,6 +812,16 @@
       if (role === 'student') {
         patch.classId = document.getElementById('eu-class')?.value || null;
         const mentorId = document.getElementById('eu-mentor')?.value || null;
+        const registerNo = document.getElementById('eu-regno')?.value.trim() || '';
+
+        // Save registerNo and phone to student profile
+        const existingProfile = DB.Profiles.get(id) || {};
+        DB.Profiles.save(id, {
+          ...existingProfile,
+          registerNo,
+          phone: phone || existingProfile.phone || ''
+        }, session.userId);
+
         if (mentorId) {
           DB.Assignments.assign(mentorId, id, session.userId);
         } else {
@@ -850,7 +875,7 @@
             <div class="section-card-body">
               <div class="alert alert-info mb-4">${Icons.info}
                 <div><strong>CSV Format:</strong> The file must have these columns in order:<br>
-                <code style="font-size:11px;background:var(--bg-surface-2);padding:2px 6px;border-radius:4px">name, email, role, department, course, phone, parentemail</code><br>
+                <code style="font-size:11px;background:var(--bg-surface-2);padding:2px 6px;border-radius:4px">name, email, role, department, course, phone, registerno, rollno, parentemail</code><br>
                 <span style="font-size:11px;color:var(--text-secondary)">role must be: principal, hod, mentor, student, or parent</span></div>
               </div>
               <div class="upload-zone" id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click()">
@@ -865,10 +890,10 @@
           <div class="section-card">
             <div class="section-card-header"><div class="section-card-title">${Icons.fileText} Sample CSV</div></div>
             <div class="section-card-body">
-              <pre style="background:var(--bg-surface-2);padding:var(--space-4);border-radius:var(--border-radius-md);font-size:11px;overflow-x:auto;white-space:pre">name,email,role,department,course,phone
-Dr. Meera Nair,meera@sbc.edu,mentor,Science & Technology,,9876500000
-Arun Suresh,arun.s@gmail.com,student,Science & Technology,BSc Computer Science,9876511111
-Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9876522222</pre>
+              <pre style="background:var(--bg-surface-2);padding:var(--space-4);border-radius:var(--border-radius-md);font-size:11px;overflow-x:auto;white-space:pre">name,email,role,department,course,phone,registerno,rollno
+Dr. Meera Nair,meera@sbc.edu,mentor,Science & Technology,,,,
+Arun Suresh,arun.s@gmail.com,student,Science & Technology,BSc Computer Science,9876511111,REG/CS/2024/09,BSC/CS/2024/09
+Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9876522222,REG/ENG/2024/01,MA/ENG/2024/01</pre>
               <button class="btn btn-secondary btn-sm mt-4" onclick="downloadSampleCSV()">
                 ${Icons.download} Download Sample
               </button>
@@ -939,8 +964,8 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
 
     function downloadSampleCSV() {
       exportCSV([
-        { name: 'Dr. Meera Nair', email: 'meera@sbc.edu', role: 'mentor', department: 'Science & Technology', course: '', phone: '9876500000' },
-        { name: 'Arun Suresh', email: 'arun.s@gmail.com', role: 'student', department: 'Science & Technology', course: 'BSc Computer Science', phone: '9876511111' },
+        { name: 'Dr. Meera Nair', email: 'meera@sbc.edu', role: 'mentor', department: 'Science & Technology', course: '', phone: '9876500000', registerno: '', rollno: '' },
+        { name: 'Arun Suresh', email: 'arun.s@gmail.com', role: 'student', department: 'Science & Technology', course: 'BSc Computer Science', phone: '9876511111', registerno: 'REG/CS/2024/09', rollno: 'BSC/CS/2024/09' },
       ], 'mentorfile_import_sample.csv');
     }
 
@@ -1527,14 +1552,17 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
           const matchedStudent = students.find(s => {
             const profile = DB.Profiles.get(s.id) || {};
             if (matchKey === 'rollNo') {
-              return (profile.rollNo || '').trim().toLowerCase() === matchValNormalized;
+              return (profile.rollNo || '').trim().toLowerCase() === matchValNormalized ||
+                     (profile.registerNo || '').trim().toLowerCase() === matchValNormalized;
             } else if (matchKey === 'phone') {
               const cleanVal = matchValNormalized.replace(/\D/g, '');
               const cleanSPhone = (s.phone || '').replace(/\D/g, '');
+              const cleanPPhone = (profile.phone || '').replace(/\D/g, '');
               const cleanFPhone = (profile.fatherPhone || '').replace(/\D/g, '');
               const cleanMPhone = (profile.motherPhone || '').replace(/\D/g, '');
-              return (cleanSPhone && cleanSPhone.endsWith(cleanVal)) || 
-                     (cleanFPhone && cleanFPhone.endsWith(cleanVal)) || 
+              return (cleanSPhone && cleanSPhone.endsWith(cleanVal)) ||
+                     (cleanPPhone && cleanPPhone.endsWith(cleanVal)) ||
+                     (cleanFPhone && cleanFPhone.endsWith(cleanVal)) ||
                      (cleanMPhone && cleanMPhone.endsWith(cleanVal));
             }
             return false;

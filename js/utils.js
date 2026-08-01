@@ -484,6 +484,7 @@ const PDFGen = {
           <div class="grid2">
             ${[
               ['Name', student.name],
+              ['Register No.', profile.registerNo || '—'],
               ['Roll No.', profile.rollNo || '—'],
               ['Department', dept?.name || '—'],
               ['Program', program?.name || '—'],
@@ -496,7 +497,9 @@ const PDFGen = {
           <div class="grid2">
             ${[
               ['Name', student.name],
+              ['Register No.', profile.registerNo || '—'],
               ['Roll No.', profile.rollNo || '—'],
+              ['Phone', student.phone || profile.phone || '—'],
               ['Department', dept?.name || '—'],
               ['Program', program?.name || '—'],
               ['Class', profile.className || '—'],

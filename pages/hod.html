@@ -359,14 +359,15 @@
                   <tr>
                     <th style="width:40px"><input type="checkbox" id="select-all-class" onclick="toggleSelectAllClass(this.checked)"></th>
                     <th>Student</th>
-                    <th>Roll No</th>
+                    <th>Roll / Reg No</th>
+                    <th>Phone</th>
                     <th>Attendance (Current Sem)</th>
                     <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${students.map(s => rowForClassStudent(s)).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>`}
+                  ${students.map(s => rowForClassStudent(s)).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>`}
                 </tbody>
               </table>
             </div>
@@ -380,7 +381,11 @@
       return `<tr>
         <td><input type="checkbox" class="student-select-cb" data-id="${s.id}" onchange="updateBulkToolbar()"></td>
         <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
-        <td class="text-sm">${Str.escHtml(profile.rollNo || '—')}</td>
+        <td class="text-sm">
+          <div>Roll: ${Str.escHtml(profile.rollNo || '—')}</div>
+          ${profile.registerNo ? `<div style="font-size:11px;color:var(--text-tertiary)">Reg: ${Str.escHtml(profile.registerNo)}</div>` : ''}
+        </td>
+        <td class="text-sm">${Str.escHtml(s.phone || profile.phone || '—')}</td>
         <td>${currentSemAttendance(s.id)}</td>
         <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
         <td><div class="flex gap-2">
@@ -641,12 +646,18 @@
           </div>
         </div>
         <div class="section-card"><div class="table-wrapper"><table class="data-table">
-          <thead><tr><th>Student</th><th>Class</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Student</th><th>Class</th><th>Register / Roll No</th><th>Phone</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>${students.map(s => {
             const program = DB.Programs.getById(s.programId);
+            const profile = DB.Profiles.get(s.id) || {};
             return `<tr>
               <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
               <td class="text-sm">${Str.escHtml(program?.name || '—')}</td>
+              <td class="text-sm">
+                <div>Reg: ${Str.escHtml(profile.registerNo || '—')}</div>
+                <div style="font-size:11px;color:var(--text-tertiary)">Roll: ${Str.escHtml(profile.rollNo || '—')}</div>
+              </td>
+              <td class="text-sm">${Str.escHtml(s.phone || profile.phone || '—')}</td>
               <td>${currentSemAttendance(s.id)}</td>
               <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
               <td><div class="flex gap-2">
@@ -656,7 +667,7 @@
                 ${parentApprovalBtn(s)}
               </div></td>
             </tr>`;
-          }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students.</td></tr>'}</tbody>
+          }).join('') || '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students.</td></tr>'}</tbody>
         </table></div></div>`;
     }
 
@@ -668,6 +679,8 @@
         title: `Edit — ${s.name}`, size: 'sm',
         body: `
           <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="es-name" value="${s.name}"></div>
+          <div class="form-group"><label class="form-label">Register Number</label><input class="form-input" id="es-regno" value="${p.registerNo || ''}" placeholder="e.g. REG/CS/2024/09"></div>
+          <div class="form-group"><label class="form-label">Phone Number</label><input class="form-input" id="es-phone" value="${s.phone || p.phone || ''}" placeholder="9876543210"></div>
           <div class="form-group"><label class="form-label">Gender</label>
             <select class="form-select" id="es-gender">
               ${['','Male','Female','Other'].map(g => `<option value="${g}" ${(p.gender||'')===g?'selected':''}>${g||'— select —'}</option>`).join('')}
@@ -694,11 +707,13 @@
 
     function saveStudentUser(studentId) {
       const name = document.getElementById('es-name').value.trim();
+      const registerNo = document.getElementById('es-regno').value.trim();
+      const phone = document.getElementById('es-phone').value.trim();
       const gender = document.getElementById('es-gender').value;
       const parentEmail = document.getElementById('es-parent').value.trim().toLowerCase();
       const approved = document.getElementById('es-approved').checked;
-      DB.Users.update(studentId, { name, parentEmail: parentEmail || null, parentApproved: approved }, session.userId);
-      DB.Profiles.save(studentId, { ...(DB.Profiles.get(studentId)||{}), gender }, session.userId);
+      DB.Users.update(studentId, { name, parentEmail: parentEmail || null, parentApproved: approved, phone: phone || null }, session.userId);
+      DB.Profiles.save(studentId, { ...(DB.Profiles.get(studentId)||{}), gender, registerNo, phone }, session.userId);
       if (parentEmail) DB.ParentLinks.setParentEmail(studentId, parentEmail, session.userId);
       Toast.success('Saved', 'Student updated.');
       Modal.close('edit-stu');
@@ -817,7 +832,11 @@
         const latest = recs[recs.length - 1] || {};
         const ov = StudentReport.overview(s.id);
         return {
-          'Student Name': s.name, 'Email': s.email, 'Roll No': profile.rollNo || '',
+          'Student Name': s.name,
+          'Email': s.email,
+          'Phone': s.phone || profile.phone || '',
+          'Register No': profile.registerNo || '',
+          'Roll No': profile.rollNo || '',
           'Class': DB.Programs.getById(s.programId)?.name || '',
           'Latest SGPA': latest.gradePoint || 'No Data', 'Grade': latest.grade || 'No Data',
           'Latest Attendance (%)': latest.attendance || 'No Data',

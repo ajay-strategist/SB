@@ -531,6 +531,15 @@ const DB = (() => {
       if (error) return { ok: false, error: error.message };
       const link = `${window.location.origin}/pages/set-password.html?invite=${res.token}`;
       console.info(`[EMAIL] Invite sent: ${link}`);
+
+      if (data.role === 'student') {
+        Profiles.save(res.userId, {
+          registerNo: data.registerNo || '',
+          phone: data.phone || '',
+          rollNo: data.rollNo || ''
+        }, actorId);
+      }
+
       await SB.hydrate();
       return { ok: true, user: { id: res.userId, ...data }, inviteToken: res.token, inviteLink: link };
     } else {
@@ -549,6 +558,15 @@ const DB = (() => {
         linkedStudentId: data.linkedStudentId || null,
         classId: data.classId || null,
       }, actorId);
+
+      if (data.role === 'student') {
+        Profiles.save(user.id, {
+          registerNo: data.registerNo || '',
+          phone: data.phone || '',
+          rollNo: data.rollNo || ''
+        }, actorId);
+      }
+
       return { ok: true, user };
     }
   }
@@ -567,7 +585,21 @@ const DB = (() => {
       }
       const dept = findAll(KEYS.departments).find(d => d.name.toLowerCase() === (row.department || '').toLowerCase());
       const program = findAll(KEYS.programs).find(p => p.name.toLowerCase() === (row.program || '').toLowerCase());
-      const res = await createUser({ email: row.email, name: row.name, role: row.role, departmentId: dept?.id, programId: program?.id, phone: row.phone, parentEmail: row.parentemail || row['parent email'] }, actorId);
+
+      const registerNo = row.registerno || row['register number'] || row['register no'] || '';
+      const rollNo = row.rollno || row['roll number'] || row['roll no'] || '';
+
+      const res = await createUser({
+        email: row.email,
+        name: row.name,
+        role: row.role,
+        departmentId: dept?.id,
+        programId: program?.id,
+        phone: row.phone || row['phone number'] || '',
+        registerNo,
+        rollNo,
+        parentEmail: row.parentemail || row['parent email']
+      }, actorId);
       results.push({ row: i, email: row.email, ...res });
     }
     return results;
@@ -632,7 +664,16 @@ const DB = (() => {
   // ── Student Profiles ─────────────────────────────────────────
   const Profiles = {
     get: studentId => findWhere(KEYS.studentProfiles, p => p.studentId === studentId)[0] || null,
-    save: (studentId, data, actor) => upsert(KEYS.studentProfiles, p => p.studentId === studentId, { ...data, studentId }, actor),
+    save: (studentId, data, actor) => {
+      const res = upsert(KEYS.studentProfiles, p => p.studentId === studentId, { ...data, studentId }, actor);
+      if (data.phone) {
+        const user = findById(KEYS.users, studentId);
+        if (user && user.phone !== data.phone) {
+          update(KEYS.users, studentId, { phone: data.phone }, actor);
+        }
+      }
+      return res;
+    },
   };
 
   // ── Semester Records ─────────────────────────────────────────
@@ -1102,6 +1143,7 @@ const DB = (() => {
       status: 'active',
       departmentId: deptSci.id,
       programId: programBSc.id,
+      phone: '9876500011',
       parentEmail: 'krishna.parent@gmail.com',
     }, 'system');
 
@@ -1113,6 +1155,7 @@ const DB = (() => {
       status: 'active',
       departmentId: deptSci.id,
       programId: programBSc.id,
+      phone: '9876500022',
       parentEmail: 'menon.parent@gmail.com',
     }, 'system');
 
@@ -1124,6 +1167,7 @@ const DB = (() => {
       status: 'active',
       departmentId: deptArts.id,
       programId: programMAEng.id,
+      phone: '9876500033',
       parentEmail: 'pillai.parent@gmail.com',
     }, 'system');
 
@@ -1135,6 +1179,7 @@ const DB = (() => {
       status: 'active',
       departmentId: deptSci.id,
       programId: programBSc.id,
+      phone: '9876500044',
       parentEmail: 'babu.parent@gmail.com',
     }, 'system');
 
@@ -1174,8 +1219,10 @@ const DB = (() => {
     // Student Profiles
     Profiles.save(student1.id, {
       photo: null,
+      registerNo: 'REG/CS/2024/01',
       rollNo: 'BSC/CS/2024/01',
       className: 'BSc CS – Batch 2024–27',
+      phone: '9876500011',
       permanentAddress: '34, Puthenpurackal, Alappuzha, Kerala 688001',
       permanentPhone: '9876543210',
       communicationAddress: 'Room 12, St. Berchmans Hostel, Changanacherry',
@@ -1194,7 +1241,9 @@ const DB = (() => {
     }, mentor1.id);
 
     Profiles.save(student2.id, {
+      registerNo: 'REG/CS/2024/02',
       rollNo: 'BSC/CS/2024/02', className: 'BSc CS – Batch 2024–27',
+      phone: '9876500022',
       fatherName: 'Mr. Rajan Menon', fatherOccupation: 'Govt. Officer', fatherPhone: '9988776655',
       motherName: 'Mrs. Deepa Menon', motherOccupation: 'Home Maker',
       religion: 'Hindu', community: 'Menon',
@@ -1205,7 +1254,9 @@ const DB = (() => {
     }, mentor1.id);
 
     Profiles.save(student3.id, {
+      registerNo: 'REG/ENG/2024/01',
       rollNo: 'MA/ENG/2024/01', className: 'MA English – Batch 2024–26',
+      phone: '9876500033',
       fatherName: 'Mr. Ravi Pillai', fatherOccupation: 'Farmer', fatherPhone: '8811223344',
       motherName: 'Mrs. Suma Pillai', motherOccupation: 'Teacher',
       religion: 'Hindu', community: 'Pillai',
@@ -1216,7 +1267,9 @@ const DB = (() => {
     }, mentor2.id);
 
     Profiles.save(student4.id, {
+      registerNo: 'REG/CS/2024/04',
       rollNo: 'BSC/CS/2024/04', className: 'BSc CS – Batch 2024–27',
+      phone: '9876500044',
       fatherName: 'Mr. Babu Varghese', fatherOccupation: 'Driver', fatherPhone: '9111222333',
       motherName: 'Mrs. Beena Babu', motherOccupation: 'Home Maker',
       religion: 'Christian', community: 'Latin Catholic',
