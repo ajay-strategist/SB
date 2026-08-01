@@ -93,7 +93,7 @@
     let activeSection = 'dashboard';
     let currentRecordSemester = 1;
     let isEditingRecord = false;
-    let isEditingSubjects = false;
+    let isEditingCourses = false;
 
     window.addEventListener('DOMContentLoaded', async () => {
       await DB.init();
@@ -211,7 +211,7 @@
     // ── Student Dashboard ────────────────────────────────────────
     function renderDashboard(container) {
       const profile = DB.Profiles.get(session.userId) || {};
-      const course = DB.Courses.getById(session.courseId);
+      const program = DB.Programs.getById(session.programId);
       const mentorId = DB.Assignments.getMentor(session.userId);
       const mentor = mentorId ? DB.Users.getById(mentorId) : null;
       const recs = DB.SemesterRecords.getAll(session.userId);
@@ -223,7 +223,7 @@
       container.innerHTML = `
         <div class="page-header">
           <h1 class="page-title">Welcome, ${session.name}</h1>
-          <p class="page-subtitle">Track your mentorship logs, courses, and PTA meetings.</p>
+          <p class="page-subtitle">Track your mentorship logs, programs, and PTA meetings.</p>
         </div>
 
         <div class="stats-grid">
@@ -249,7 +249,7 @@
               <table class="data-table">
                 <thead><tr><th>Semester</th><th>SGPA</th><th>Grade</th><th>Attendance</th></tr></thead>
                 <tbody>
-                  ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => {
+                  ${Array.from({ length: program?.semesterCount || 6 }, (_, i) => {
                     const r = recs.find(rc => rc.semester === i + 1);
                     return `
                       <tr>
@@ -387,7 +387,7 @@
 
     // ── Academic & Attendance Page ──────────────────────────────
     function renderAcademic(container) {
-      const course = DB.Courses.getById(session.courseId);
+      const program = DB.Programs.getById(session.programId);
       const recs = DB.SemesterRecords.getAll(session.userId);
       const ov = StudentReport.overview(session.userId);
       container.innerHTML = `
@@ -404,7 +404,7 @@
           <div class="section-card-header"><div class="section-card-title">${Icons.chart} Semester-wise Performance</div></div>
           <div class="section-card-body" style="padding:0"><table class="data-table">
             <thead><tr><th>Semester</th><th>SGPA</th><th>Grade</th><th>Attendance</th><th>Result</th></tr></thead>
-            <tbody>${Array.from({ length: course?.semesterCount || 6 }, (_, i) => {
+            <tbody>${Array.from({ length: program?.semesterCount || 6 }, (_, i) => {
               const r = recs.find(rc => rc.semester === i + 1) || {};
               const gp = parseFloat(r.gradePoint);
               const result = isNaN(gp) ? '—' : (gp >= 5 && (r.grade||'').toUpperCase() !== 'F' ? '<span class="badge badge-green">Pass</span>' : '<span class="badge badge-red">Fail</span>');
@@ -414,7 +414,7 @@
         </div>
 
         <div class="semester-tabs">
-          ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `
+          ${Array.from({ length: program?.semesterCount || 6 }, (_, i) => `
             <button class="semester-tab-btn ${currentRecordSemester === i+1 ? 'active' : ''}" onclick="switchRecordSemester(${i+1})">Semester ${i+1}</button>`).join('')}
         </div>
         <div id="semester-detail-card"></div>`;
@@ -424,7 +424,7 @@
     function switchRecordSemester(sem) {
       currentRecordSemester = sem;
       isEditingRecord = false;
-      isEditingSubjects = false;
+      isEditingCourses = false;
       renderSemesterDetail();
     }
 
@@ -477,43 +477,48 @@
 
         <div class="section-card mb-6">
           <div class="section-card-header">
-            <div class="section-card-title">${Icons.fileText} Subject-wise Details — Semester ${currentRecordSemester}</div>
-            ${!isEditingSubjects ? `
-              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="startSubjectsEdit()">${Icons.edit} Edit Subjects</button>
+            <div class="section-card-title">${Icons.fileText} Course-wise Details — Semester ${currentRecordSemester}</div>
+            ${!isEditingCourses ? `
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="startCoursesEdit()">${Icons.edit} Edit Courses</button>
             ` : `
               <div class="flex gap-2">
-                <button class="btn btn-secondary btn-sm" onclick="addSubjectRow()">${Icons.plus} Add Subject</button>
+                <button class="btn btn-secondary btn-sm" onclick="addCourseRow()">${Icons.plus} Add Course</button>
               </div>
             `}
           </div>
           <div class="section-card-body" style="padding:0">
             <div class="table-wrapper">
-              <table class="data-table" id="subjects-table">
+              <table class="data-table" id="courses-table">
                 ${(() => {
-                  const cfg = DB.CourseConfig.get(session.courseId);
+                  const cfg = DB.ProgramConfig.get(session.programId);
                   const cols = [...Array.from({length: cfg.numInternals||1}, (_,i)=>`Internal ${i+1}`), ...((cfg.components||[]).filter(c=>!/^internal/i.test(c)))];
-                  const head = `<thead><tr><th>Subject</th><th>Attendance %</th>${cols.map(c=>`<th>${c}</th>`).join('')}<th>External</th><th>Grade</th>${isEditingSubjects ? '<th></th>' : ''}</tr></thead>`;
+                  const head = `<thead><tr><th>Course</th><th>Attendance %</th>${cols.map(c=>`<th>${c}</th>`).join('')}<th>External</th><th>Grade</th>${isEditingCourses ? '<th></th>' : ''}</tr></thead>`;
                   
+                  const studentUser = DB.Users.getById(session.userId);
+                  const coursesToRender = (record.courses && record.courses.length > 0)
+                    ? record.courses
+                    : DB.Classes.getCoursesForSemester(studentUser?.classId, studentUser?.programId, currentRecordSemester).map(name => ({ name }));
+
                   let body = '';
-                  if (isEditingSubjects) {
-                    body = `<tbody id="subjects-tbody">
-                      ${(record.subjects || []).map(su => subjectRowHTML(su)).join('') || ''}
+                  if (isEditingCourses) {
+                    body = `<tbody id="courses-tbody">
+                      ${coursesToRender.map(su => courseRowHTML(su)).join('')}
                     </tbody>`;
                   } else {
-                    body = `<tbody>${(record.subjects || []).map(su => {
+                    body = `<tbody>${coursesToRender.map(su => {
                       const marks = su.marks || (su.internal!=null ? {'Internal 1': su.internal} : {});
                       return `<tr><td>${Str.escHtml(su.name||'—')}</td><td>${Str.escHtml(su.attendance ?? '—')}</td>${cols.map(c=>`<td>${Str.escHtml(marks[c] ?? '—')}</td>`).join('')}<td>${Str.escHtml(su.external ?? '—')}</td><td>${Str.escHtml(su.grade||'—')}</td></tr>`;
-                    }).join('') || `<tr><td colspan="${cols.length+4}" style="text-align:center;color:var(--text-tertiary)">No subject-wise details added for this semester yet.</td></tr>`}</tbody>`;
+                    }).join('') || `<tr><td colspan="${cols.length+4}" style="text-align:center;color:var(--text-tertiary)">No course-wise details added for this semester yet.</td></tr>`}</tbody>`;
                   }
                   
                   return head + body;
                 })()}
               </table>
             </div>
-            ${isEditingSubjects ? `
+            ${isEditingCourses ? `
               <div style="padding:var(--space-4);display:flex;gap:var(--space-2)">
-                <button class="btn btn-primary btn-sm" onclick="saveSubjects()">Save Changes</button>
-                <button class="btn btn-secondary btn-sm" onclick="cancelSubjectsEdit()">Cancel</button>
+                <button class="btn btn-primary btn-sm" onclick="saveCourses()">Save Changes</button>
+                <button class="btn btn-secondary btn-sm" onclick="cancelCoursesEdit()">Cancel</button>
               </div>
             ` : ''}
           </div>
@@ -541,18 +546,18 @@
     }
 
     function componentColumns() {
-      const cfg = DB.CourseConfig.get(session.courseId);
+      const cfg = DB.ProgramConfig.get(session.programId);
       const internals = Array.from({ length: cfg.numInternals || 1 }, (_, i) => `Internal ${i + 1}`);
       const others = (cfg.components || []).filter(c => !/^internal/i.test(c));
       return [...internals, ...others];
     }
 
-    function subjectRowHTML(su = {}) {
+    function courseRowHTML(su = {}) {
       const cols = componentColumns();
       const marks = { ...(su.marks || {}) };
       if (su.internal != null && su.internal !== '' && marks['Internal 1'] == null) marks['Internal 1'] = su.internal;
       return `<tr>
-        <td><input class="form-input" data-f="name" value="${su.name ? Str.escHtml(su.name) : ''}" placeholder="Subject" required></td>
+        <td><input class="form-input" data-f="name" value="${su.name ? Str.escHtml(su.name) : ''}" placeholder="Course" required></td>
         <td><input class="form-input" type="number" data-f="attendance" value="${su.attendance ?? ''}" style="max-width:90px"></td>
         ${cols.map(c => `<td><input class="form-input" type="number" data-comp="${Str.escHtml(c)}" value="${marks[c] ?? ''}" style="max-width:90px"></td>`).join('')}
         <td><input class="form-input" type="number" data-f="external" value="${su.external ?? ''}" style="max-width:90px"></td>
@@ -561,10 +566,10 @@
       </tr>`;
     }
 
-    function addSubjectRow() {
-      const tbody = document.getElementById('subjects-tbody');
+    function addCourseRow() {
+      const tbody = document.getElementById('courses-tbody');
       if (tbody) {
-        tbody.insertAdjacentHTML('beforeend', subjectRowHTML());
+        tbody.insertAdjacentHTML('beforeend', courseRowHTML());
       }
     }
 
@@ -578,13 +583,13 @@
       renderSemesterDetail();
     }
 
-    function startSubjectsEdit() {
-      isEditingSubjects = true;
+    function startCoursesEdit() {
+      isEditingCourses = true;
       renderSemesterDetail();
     }
 
-    function cancelSubjectsEdit() {
-      isEditingSubjects = false;
+    function cancelCoursesEdit() {
+      isEditingCourses = false;
       renderSemesterDetail();
     }
 
@@ -628,9 +633,9 @@
       renderAcademic(document.getElementById('page-content'));
     }
 
-    function saveSubjects() {
-      const rows = [...document.querySelectorAll('#subjects-tbody tr')];
-      const subjects = rows.map(tr => {
+    function saveCourses() {
+      const rows = [...document.querySelectorAll('#courses-tbody tr')];
+      const courses = rows.map(tr => {
         const nameEl = tr.querySelector(`[data-f="name"]`);
         const name = nameEl ? nameEl.value.trim() : '';
         const attEl = tr.querySelector(`[data-f="attendance"]`);
@@ -651,21 +656,21 @@
       }).filter(s => s.name);
 
       const rec = DB.SemesterRecords.get(session.userId, currentRecordSemester) || {};
-      const updated = { ...rec, subjects };
+      const updated = { ...rec, courses };
       DB.SemesterRecords.save(session.userId, currentRecordSemester, updated, session.userId);
 
       const mentorId = DB.Assignments.getMentor(session.userId);
       if (mentorId) {
         DB.Notifications.create(
           mentorId, 
-          'Subjects Updated by Student', 
-          `${session.name} updated subject-wise marks/attendance for Semester ${currentRecordSemester}.`, 
+          'Courses Updated by Student', 
+          `${session.name} updated course-wise marks/attendance for Semester ${currentRecordSemester}.`, 
           'info'
         );
       }
 
-      Toast.success('Saved', 'Subject-wise report updated.');
-      isEditingSubjects = false;
+      Toast.success('Saved', 'Course-wise report updated.');
+      isEditingCourses = false;
       renderAcademic(document.getElementById('page-content'));
     }
 
@@ -734,13 +739,13 @@
     }
 
     function requestMeetingModal() {
-      const course = DB.Courses.getById(session.courseId);
+      const program = DB.Programs.getById(session.programId);
       Modal.create('req-meet', {
         title: 'Request a Meeting',
         body: `
           <div class="form-grid">
             <div class="form-group"><label class="form-label required">Semester</label>
-              <select class="form-select" id="rm-sem">${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}</select></div>
+              <select class="form-select" id="rm-sem">${Array.from({ length: program?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}</select></div>
             <div class="form-group"><label class="form-label required">Preferred Date</label><input type="date" class="form-input" id="rm-date" value="${DateFmt.today()}"></div>
           </div>
           <div class="form-group"><label class="form-label">Reason / what you'd like to discuss</label><textarea class="form-textarea" id="rm-notes" rows="2"></textarea></div>
@@ -825,7 +830,7 @@
     }
 
     function showAddGoalModal() {
-      const course = DB.Courses.getById(session.courseId);
+      const program = DB.Programs.getById(session.programId);
       Modal.create('add-goal', {
         title: 'Add Goal Milestone',
         body: `
@@ -834,7 +839,7 @@
             <div class="form-group">
               <label class="form-label required">Target Semester</label>
               <select class="form-select" id="g-sem">
-                ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+                ${Array.from({ length: program?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
               </select>
             </div>
             <div class="form-group"><label class="form-label required">Target Date</label><input type="date" class="form-input" id="g-date" value="${DateFmt.today()}"></div>

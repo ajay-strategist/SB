@@ -13,6 +13,9 @@
 - [x] pages/forgot-password.html (Reset password link generator)
 - [x] pages/admin.html (Admin panel dashboard, CRUD, CSV import, settings, logs)
 - [x] pages/mentor.html (Mentor view, grading, meetings log, signature box, details)
+- [x] Rename mentor UI & logic in `pages/mentor.html`
+  - [x] Rename UI labels (e.g. Subject-wise Report -> Course-wise Report, Course -> Program)
+  - [x] Rename logic variables (`subjects` -> `courses`, `subjectRowHTML` -> `courseRowHTML`, etc.)
 - [x] pages/hod.html (HOD ledger, dept stats, approvals, CSV reports)
 - [x] pages/student.html (Student profile editor, grades view, goal milestones, wellbeing)
 - [x] pages/parent.html (Parent progress view, digital PTA acknowledgment signature)

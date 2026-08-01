@@ -89,8 +89,8 @@
     function scopedFaculty() {
       return DB.Users.getAll().filter(u => u.role === 'mentor' && (isPrincipal || u.departmentId === session.departmentId));
     }
-    function scopedCourses() {
-      return DB.Courses.getAll().filter(c => isPrincipal || c.departmentId === session.departmentId);
+    function scopedPrograms() {
+      return DB.Programs.getAll().filter(p => isPrincipal || p.departmentId === session.departmentId);
     }
     function scopedDepartments() {
       return DB.Departments.getAll().filter(d => isPrincipal || d.id === session.departmentId);
@@ -209,7 +209,7 @@
     function renderDashboard(container) {
       const students = scopedStudents();
       const faculty = scopedFaculty();
-      const courses = scopedCourses();
+      const programs = scopedPrograms();
       const scopeName = isPrincipal ? 'College' : (DB.Departments.getById(session.departmentId)?.name || 'Department');
 
       container.innerHTML = `
@@ -220,7 +220,7 @@
         <div class="stats-grid">
           ${statCard('No. of Students', students.length, Icons.users, 'linear-gradient(135deg, #4F46E5, #6366F1)')}
           ${statCard('No. of Faculties', faculty.length, Icons.user, 'linear-gradient(135deg, #0891B2, #06B6D4)')}
-          ${statCard('No. of Classes', courses.length, Icons.grid, 'linear-gradient(135deg, #059669, #10B981)')}
+          ${statCard('No. of Classes', programs.length, Icons.grid, 'linear-gradient(135deg, #059669, #10B981)')}
           ${statCard('Requires Attention', students.filter(s => DB.Analytics.getStudentStatus(s.id) !== 'green').length, Icons.info, 'linear-gradient(135deg, #F59E0B, #FBBF24)')}
         </div>
 
@@ -228,12 +228,12 @@
           <div class="section-card">
             <div class="section-card-header"><div class="section-card-title">${Icons.grid} No. of Students by Class</div></div>
             <div class="section-card-body" style="padding:0">
-              ${courses.map(c => {
-                const cs = students.filter(s => s.courseId === c.id);
+              ${programs.map(p => {
+                const cs = students.filter(s => s.programId === p.id);
                 const g = genderCounts(cs);
-                return `<div style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border-color);cursor:pointer" onclick="openClass('${c.id}')">
+                return `<div style="padding:var(--space-4) var(--space-5);border-bottom:1px solid var(--border-color);cursor:pointer" onclick="openClass('${p.id}')">
                   <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                    <span class="font-semibold text-sm">${c.name}</span>
+                    <span class="font-semibold text-sm">${p.name}</span>
                     <span class="text-xs text-muted">${cs.length} students</span>
                   </div>
                   <div class="text-xs text-muted">Male ${g.male} · Female ${g.female} · Other ${g.other}</div>
@@ -265,12 +265,12 @@
     }
 
     // ── Classes tab (cards) ──────────────────────────────────────
-    function classIncharge(course) {
+    function classIncharge(program) {
       // in-charge = faculty in the class's department with the most mentees in that class
-      const fac = scopedFaculty().filter(m => m.departmentId === course.departmentId);
+      const fac = scopedFaculty().filter(m => m.departmentId === program.departmentId);
       let best = null, bestN = -1;
       fac.forEach(m => {
-        const n = DB.Assignments.getMentees(m.id).map(id => DB.Users.getById(id)).filter(s => s && s.courseId === course.id).length;
+        const n = DB.Assignments.getMentees(m.id).map(id => DB.Users.getById(id)).filter(s => s && s.programId === program.id).length;
         if (n > bestN) { bestN = n; best = m; }
       });
       return bestN > 0 ? best : null;
@@ -330,9 +330,14 @@
                 <h1 class="page-title">${cls?.name || 'Class'}</h1>
                 <p class="page-subtitle">${students.length} students · Year ${cls?.currentYear} / ${cls?.durationYears}</p>
               </div>
-              <button class="btn btn-primary btn-sm hover-lift press-scale" onclick="showAddStudentsModal('${classId}')">
-                ${Icons.plus} Add Students
-              </button>
+              <div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="manageClassCoursesModal('${classId}')">
+                  ${Icons.book} Manage Courses
+                </button>
+                <button class="btn btn-primary btn-sm hover-lift press-scale" onclick="showAddStudentsModal('${classId}')">
+                  ${Icons.plus} Add Students
+                </button>
+              </div>
             </div>
           </div>
 
@@ -439,7 +444,7 @@
       const ids = getSelectedStudentIds();
       const cls = DB.Classes.getById(classId);
       ids.forEach(id => {
-        DB.Users.update(id, { classId, courseId: cls?.courseId, departmentId: cls?.departmentId }, session.userId);
+        DB.Users.update(id, { classId, programId: cls?.programId, departmentId: cls?.departmentId }, session.userId);
       });
       Toast.success('Moved', `${ids.length} students moved to ${cls.name}.`);
       Modal.close('bulk-move');
@@ -579,7 +584,7 @@
       const cls = DB.Classes.getById(classId);
       checkedCbs.forEach(cb => {
         const studentId = cb.dataset.id;
-        DB.Users.update(studentId, { classId, courseId: cls?.courseId, departmentId: cls?.departmentId }, session.userId);
+        DB.Users.update(studentId, { classId, programId: cls?.programId, departmentId: cls?.departmentId }, session.userId);
       });
 
       Toast.success('Success', `${checkedCbs.length} students added to class.`);
@@ -596,7 +601,7 @@
 
     function rowForStudent(s) {
       const profile = DB.Profiles.get(s.id) || {};
-      const course = DB.Courses.getById(s.courseId);
+      const program = DB.Programs.getById(s.programId);
       return `<tr>
         <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
         <td class="text-sm">${Str.escHtml(profile.rollNo || '—')}</td>
@@ -638,10 +643,10 @@
         <div class="section-card"><div class="table-wrapper"><table class="data-table">
           <thead><tr><th>Student</th><th>Class</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
           <tbody>${students.map(s => {
-            const course = DB.Courses.getById(s.courseId);
+            const program = DB.Programs.getById(s.programId);
             return `<tr>
               <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
-              <td class="text-sm">${Str.escHtml(course?.name || '—')}</td>
+              <td class="text-sm">${Str.escHtml(program?.name || '—')}</td>
               <td>${currentSemAttendance(s.id)}</td>
               <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
               <td><div class="flex gap-2">
@@ -732,7 +737,7 @@
       if (mentorId) DB.Assignments.assign(mentorId, studentId, session.userId);
       if (classId) {
         const cls = DB.Classes.getById(classId);
-        DB.Users.update(studentId, { classId, courseId: cls?.courseId, departmentId: cls?.departmentId }, session.userId);
+        DB.Users.update(studentId, { classId, programId: cls?.programId, departmentId: cls?.departmentId }, session.userId);
       }
       Toast.success('Transferred', 'Student reassigned.');
       Modal.close('transfer');
@@ -742,7 +747,7 @@
     // ── Edit class ──────────────────────────────────────
     function editClass(classId) {
       const cls = DB.Classes.getById(classId);
-      const courses = DB.Courses.getAll().filter(c => isPrincipal || c.departmentId === session.departmentId);
+      const programs = DB.Programs.getAll().filter(p => isPrincipal || p.departmentId === session.departmentId);
       const faculty = DB.Users.getAll().filter(u => (u.role === 'mentor' || u.role === 'hod') && (isPrincipal || u.departmentId === session.departmentId));
       const [mm, dd] = (cls?.promotionDate || '06-01').split('-');
       Modal.create('edit-class', {
@@ -752,19 +757,19 @@
             <div class="form-group"><label class="form-label required">Year</label>
               <select class="form-select" id="ec-year">${[1,2,3,4,5,6].map(y=>`<option value="${y}" ${cls?.currentYear===y?'selected':''}>${y}</option>`).join('')}</select>
             </div>
-            <div class="form-group"><label class="form-label required">Course</label>
-              <select class="form-select" id="ec-course" onchange="syncCourseCode()">${courses.map(c=>`<option value="${c.id}" data-code="${c.code||""}" ${cls?.courseId===c.id?'selected':''}>${c.name}</option>`).join('')}</select>
+            <div class="form-group"><label class="form-label required">Program</label>
+              <select class="form-select" id="ec-program" onchange="syncProgramCode()">${programs.map(p=>`<option value="${p.id}" data-code="${p.code||""}" ${cls?.programId===p.id?'selected':''}>${p.name}</option>`).join('')}</select>
             </div>
-            <div class="form-group"><label class="form-label required">Course Code</label>
-              <input type="text" class="form-input" id="ec-coursecode" value="${Str.escHtml(cls?.courseCode || '')}" placeholder="e.g. BSC-CS" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
-              <div class="text-xs text-muted" style="margin-top:4px">Auto-filled from Course. Edit to override.</div>
+            <div class="form-group"><label class="form-label required">Program Code</label>
+              <input type="text" class="form-input" id="ec-programcode" value="${Str.escHtml(cls?.programCode || '')}" placeholder="e.g. BSC-CS" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+              <div class="text-xs text-muted" style="margin-top:4px">Auto-filled from Program. Edit to override.</div>
             </div>
             <div class="form-group"><label class="form-label required">Batch</label>
               <select class="form-select" id="ec-batch">${['A','B','C','D'].map(b=>`<option value="${b}" ${cls?.batch===b?'selected':''}>${b}</option>`).join('')}</select>
             </div>
           </div>
           <div class="form-grid">
-            <div class="form-group"><label class="form-label required">Course Duration (years)</label><input type="number" class="form-input" id="ec-dur" value="${cls?.durationYears||3}" min="1" max="6"></div>
+            <div class="form-group"><label class="form-label required">Program Duration (years)</label><input type="number" class="form-input" id="ec-dur" value="${cls?.durationYears||3}" min="1" max="6"></div>
             <div class="form-group"><label class="form-label">Promotion Date</label><input type="date" class="form-input" id="ec-promo" value="2026-${mm}-${dd}"></div>
             <div class="form-group"><label class="form-label">Class In-charge</label>
               <select class="form-select" id="ec-incharge"><option value="">— None —</option>${faculty.map(f=>`<option value="${f.id}" ${cls?.inchargeId===f.id?'selected':''}>${f.name} (${roleLabel(f.role)})</option>`).join('')}</select>
@@ -775,28 +780,28 @@
       });
     }
 
-    function syncCourseCode() {
-      const courseSel = document.getElementById('ec-course');
-      const codeInput = document.getElementById('ec-coursecode');
+    function syncProgramCode() {
+      const programSel = document.getElementById('ec-program');
+      const codeInput = document.getElementById('ec-programcode');
       if (!codeInput) return;
-      const autoCode = courseSel.options[courseSel.selectedIndex]?.dataset.code || '';
+      const autoCode = programSel.options[programSel.selectedIndex]?.dataset.code || '';
       codeInput.value = autoCode.toUpperCase();
     }
 
     function saveClass(classId) {
       const year = document.getElementById('ec-year').value;
-      const courseSel = document.getElementById('ec-course');
-      const courseId = courseSel.value;
-      const courseCode = (document.getElementById('ec-coursecode')?.value || courseSel.options[courseSel.selectedIndex]?.dataset.code || '').toUpperCase().trim();
+      const programSel = document.getElementById('ec-program');
+      const programId = programSel.value;
+      const programCode = (document.getElementById('ec-programcode')?.value || programSel.options[programSel.selectedIndex]?.dataset.code || '').toUpperCase().trim();
       const batch = document.getElementById('ec-batch').value;
       const durationYears = document.getElementById('ec-dur').value;
       const promo = document.getElementById('ec-promo').value;
       const promotionDate = promo ? promo.slice(5) : '06-01';
       const inchargeId = document.getElementById('ec-incharge').value || null;
 
-      if (!courseCode) { Toast.error('Course Code is required.'); return; }
+      if (!programCode) { Toast.error('Program Code is required.'); return; }
 
-      const data = { currentYear: year, courseId, courseCode, batch, durationYears, promotionDate, inchargeId };
+      const data = { currentYear: year, programId, programCode, batch, durationYears, promotionDate, inchargeId };
       DB.Classes.update(classId, data, session.userId);
       Toast.success('Saved', 'Class updated.');
       Modal.close('edit-class');
@@ -813,7 +818,7 @@
         const ov = StudentReport.overview(s.id);
         return {
           'Student Name': s.name, 'Email': s.email, 'Roll No': profile.rollNo || '',
-          'Class': DB.Courses.getById(s.courseId)?.name || '',
+          'Class': DB.Programs.getById(s.programId)?.name || '',
           'Latest SGPA': latest.gradePoint || 'No Data', 'Grade': latest.grade || 'No Data',
           'Latest Attendance (%)': latest.attendance || 'No Data',
           'Semesters Passed': ov.passed, 'Semesters Failed': ov.failed,
@@ -823,6 +828,68 @@
       exportCSV(rows, `Report_${isPrincipal ? 'College' : 'Dept'}_${DateFmt.today()}.csv`);
       Toast.success('Report Exported', 'CSV summary generated.');
     }
+    // ── Class Course Management Modals ───────────────────────────
+    let tempCourses = {};
+    window._mcActiveSem = "1";
+
+    window.manageClassCoursesModal = function(classId) {
+      const cls = DB.Classes.getById(classId);
+      const program = DB.Programs.getById(cls.programId);
+      const sems = program?.semesterCount || 6;
+      const classCourses = cls.semesterCourses || {};
+      const programCourses = program?.defaultCourses || {};
+      
+      tempCourses = {};
+      for (let s = 1; s <= sems; s++) {
+        tempCourses[s] = classCourses[s] || programCourses[s] || [];
+      }
+
+      const renderSemCourses = (sem) => {
+        const list = tempCourses[sem] || [];
+        const textarea = document.getElementById('mc-textarea');
+        if (textarea) textarea.value = list.join('\n');
+      };
+
+      window._mcActiveSem = "1";
+
+      Modal.create('manage-courses', {
+        title: `Courses for Class — ${cls.name}`,
+        size: 'md',
+        body: `
+          <div class="form-group">
+            <label class="form-label">Select Semester</label>
+            <select class="form-select" id="mc-sem-select" onchange="tempCourses[window._mcActiveSem] = document.getElementById('mc-textarea').value.split('\\n').map(s=>s.trim()).filter(Boolean); window._mcActiveSem = this.value; const list = tempCourses[this.value] || []; document.getElementById('mc-textarea').value = list.join('\\n');">
+              ${Array.from({ length: sems }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Courses (one per line)</label>
+            <textarea class="form-textarea" id="mc-textarea" rows="8" placeholder="e.g.&#10;Mathematics I&#10;Programming in C"></textarea>
+            <div class="form-hint">Enter each course name on a new line. Editing this will modify the course list specifically for this class.</div>
+          </div>
+        `,
+        footer: `
+          <button class="btn btn-secondary" onclick="Modal.close('manage-courses')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveClassCourses('${classId}')">Save Courses</button>
+        `
+      });
+
+      renderSemCourses(1);
+    };
+
+    window.saveClassCourses = function(classId) {
+      const sem = window._mcActiveSem;
+      const textarea = document.getElementById('mc-textarea');
+      if (textarea) {
+        tempCourses[sem] = textarea.value.split('\n').map(s=>s.trim()).filter(Boolean);
+      }
+      DB.Classes.update(classId, { semesterCourses: tempCourses }, session.userId);
+      Toast.success('Saved', 'Class-specific courses updated successfully.');
+      Modal.close('manage-courses');
+      if (typeof openClass === 'function' && typeof selectedClassId !== 'undefined' && selectedClassId === classId) {
+        openClass(classId);
+      }
+    };
   </script>
 </body>
 </html>

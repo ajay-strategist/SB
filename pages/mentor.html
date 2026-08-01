@@ -241,9 +241,9 @@
       document.getElementById('breadcrumb-current').textContent = 'Class';
       const container = document.getElementById('page-content');
       const students = myStudents();
-      // Group my students by class (course) — only classes where I have students
-      const byCourse = {};
-      students.forEach(s => { (byCourse[s.courseId] = byCourse[s.courseId] || []).push(s); });
+      // Group my students by class (program) — only classes where I have students
+      const byProgram = {};
+      students.forEach(s => { (byProgram[s.programId] = byProgram[s.programId] || []).push(s); });
 
       const inchargeClasses = DB.Classes.getAll().filter(c => c.inchargeId === session.userId);
 
@@ -267,14 +267,14 @@
       const mentorshipSection = `
         <h2 style="font-size:var(--font-size-base);font-weight:700;margin-bottom:var(--space-3)">My Mentees</h2>
         <div class="mentee-grid">
-          ${Object.keys(byCourse).map(cid => {
-            const course = DB.Courses.getById(cid);
-            const cs = byCourse[cid];
+          ${Object.keys(byProgram).map(pid => {
+            const program = DB.Programs.getById(pid);
+            const cs = byProgram[pid];
             return `<div class="section-card"><div class="section-card-body">
-              <div class="font-semibold">${course?.name || 'Class'}</div>
-              <div class="text-xs text-muted">${course?.semesterCount || 6} semesters</div>
+              <div class="font-semibold">${program?.name || 'Class'}</div>
+              <div class="text-xs text-muted">${program?.semesterCount || 6} semesters</div>
               <hr class="divider"><div class="text-sm"><strong>My students here:</strong> ${cs.length}</div>
-              <button class="btn btn-secondary btn-sm mt-3" onclick="showClassStudents('${cid}')">View Students</button>
+              <button class="btn btn-secondary btn-sm mt-3" onclick="showClassStudents('${pid}')">View Students</button>
             </div></div>`;
           }).join('') || '<div class="empty-state"><p>No classes — you have no assigned students yet.</p></div>'}
         </div>`;
@@ -292,10 +292,10 @@
 
     function setClassView(mode) { classViewMode = mode; renderClassTab(); }
 
-    function showClassStudents(cid) {
+    function showClassStudents(pid) {
       classViewMode = 'students';
       renderClassTab();
-      const students = myStudents().filter(s => s.courseId === cid);
+      const students = myStudents().filter(s => s.programId === pid);
       document.getElementById('class-view-body').innerHTML = studentsTableHTML(students);
     }
 
@@ -310,7 +310,10 @@
       document.getElementById('class-view-body').innerHTML = `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);flex-wrap:wrap;gap:var(--space-2)">
           <button class="btn btn-secondary btn-sm" onclick="setClassView('class')">${Icons.chevronLeft} Back to Classes</button>
-          <button class="btn btn-primary btn-sm" onclick="showAddStudentsModal('${classId}')">${Icons.plus} Add Students</button>
+          <div class="flex gap-2">
+            <button class="btn btn-secondary btn-sm" onclick="manageClassCoursesModal('${classId}')">${Icons.book} Manage Courses</button>
+            <button class="btn btn-primary btn-sm" onclick="showAddStudentsModal('${classId}')">${Icons.plus} Add Students</button>
+          </div>
         </div>
         <div class="page-header" style="margin-top:0">
           <h2 class="page-title">${cls?.name || 'Class'}</h2>
@@ -346,12 +349,12 @@
     }
 
     function rowForClassStudent(s) {
-      const course = DB.Courses.getById(s.courseId);
+      const program = DB.Programs.getById(s.programId);
       const isMyMentee = DB.Assignments.getMentees(session.userId).includes(s.id);
       return `<tr>
         <td><input type="checkbox" class="student-select-cb" data-id="${s.id}" onchange="updateBulkToolbar()"></td>
         <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm">${Str.escHtml(s.name)}</span></div></td>
-        <td class="text-sm">${Str.escHtml(course?.name || '—')}</td>
+        <td class="text-sm">${Str.escHtml(program?.name || '—')}</td>
         <td>${currentSemAttendance(s.id)}</td>
         <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
         <td><div class="flex gap-2">
@@ -415,7 +418,7 @@
       const ids = getSelectedStudentIds();
       const cls = DB.Classes.getById(classId);
       ids.forEach(id => {
-        DB.Users.update(id, { classId, courseId: cls?.courseId, departmentId: cls?.departmentId }, session.userId);
+        DB.Users.update(id, { classId, programId: cls?.programId, departmentId: cls?.departmentId }, session.userId);
       });
       Toast.success('Moved', `${ids.length} students moved to ${cls.name}.`);
       Modal.close('bulk-move');
@@ -556,7 +559,7 @@
       const cls = DB.Classes.getById(classId);
       checkedCbs.forEach(cb => {
         const studentId = cb.dataset.id;
-        DB.Users.update(studentId, { classId, courseId: cls?.courseId, departmentId: cls?.departmentId }, session.userId);
+        DB.Users.update(studentId, { classId, programId: cls?.programId, departmentId: cls?.departmentId }, session.userId);
       });
 
       Toast.success('Success', `${checkedCbs.length} students added to class.`);
@@ -574,10 +577,10 @@
       return `<div class="section-card"><div class="table-wrapper"><table class="data-table">
         <thead><tr><th>Student</th><th>Class</th><th>Attendance (Current Sem)</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>${students.map(s => {
-          const course = DB.Courses.getById(s.courseId);
+          const program = DB.Programs.getById(s.programId);
           return `<tr>
             <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
-            <td class="text-sm">${Str.escHtml(course?.name || '—')}</td>
+            <td class="text-sm">${Str.escHtml(program?.name || '—')}</td>
             <td>${currentSemAttendance(s.id)}</td>
             <td>${renderStatusBadge(DB.Analytics.getStudentStatus(s.id))}</td>
             <td><div class="flex gap-2">
@@ -724,10 +727,10 @@
             <div class="section-card-body" style="padding:0">
               ${flagged.map(s => {
                 const status = DB.Analytics.getStudentStatus(s.id);
-                const course = DB.Courses.getById(s.courseId);
+                const program = DB.Programs.getById(s.programId);
                 return `<div style="display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-5);border-bottom:1px solid var(--border-color);cursor:pointer" onclick="viewMenteeFile('${s.id}')">
                   ${renderAvatar(s.name,'sm',null,s.id)}
-                  <div style="flex:1;min-width:0"><div class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${s.name}</div><div class="text-xs text-muted">${course?.name || '—'} · Attendance ${currentSemAttendance(s.id)}</div></div>
+                  <div style="flex:1;min-width:0"><div class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${s.name}</div><div class="text-xs text-muted">${program?.name || '—'} · Attendance ${currentSemAttendance(s.id)}</div></div>
                   ${renderStatusBadge(status)}
                 </div>`;
               }).join('')}
@@ -737,32 +740,32 @@
 
         <div class="section-card">
           <div class="section-card-header">
-            <div class="section-card-title">${Icons.book} Courses</div>
+            <div class="section-card-title">${Icons.book} Programs</div>
           </div>
           <div class="section-card-body">
             <div class="mentee-grid">
               ${(() => {
-                const byCourse = {};
-                students.forEach(s => { (byCourse[s.courseId] = byCourse[s.courseId] || []).push(s); });
-                const ids = Object.keys(byCourse);
-                if (!ids.length) return `<div class="w-full text-center py-8"><p style="color:var(--text-secondary)">No courses — you have no assigned students yet.</p></div>`;
-                return ids.map(cid => {
-                  const course = DB.Courses.getById(cid);
-                  const cs = byCourse[cid];
-                  const dept = course ? DB.Departments.getById(course.departmentId) : null;
+                const byProgram = {};
+                students.forEach(s => { (byProgram[s.programId] = byProgram[s.programId] || []).push(s); });
+                const ids = Object.keys(byProgram);
+                if (!ids.length) return `<div class="w-full text-center py-8"><p style="color:var(--text-secondary)">No programs — you have no assigned students yet.</p></div>`;
+                return ids.map(pid => {
+                  const program = DB.Programs.getById(pid);
+                  const cs = byProgram[pid];
+                  const dept = program ? DB.Departments.getById(program.departmentId) : null;
                   return `<div class="section-card">
                     <div class="section-card-body">
                       <div style="display:flex;justify-content:space-between;align-items:start">
-                        <div style="cursor:pointer" onclick="showClassStudents('${cid}')">
-                          <div class="font-semibold">${course?.name || 'Course'}</div>
-                          <div class="text-xs text-muted">${dept?.name || ''} · ${course?.semesterCount || 6} semesters</div>
+                        <div style="cursor:pointer" onclick="showClassStudents('${pid}')">
+                          <div class="font-semibold">${program?.name || 'Program'}</div>
+                          <div class="text-xs text-muted">${dept?.name || ''} · ${program?.semesterCount || 6} semesters</div>
                         </div>
-                        <button class="btn btn-secondary btn-sm" onclick="showCourseConfig('${cid}')" title="Course Settings">${Icons.settings}</button>
+                        <button class="btn btn-secondary btn-sm" onclick="showProgramConfig('${pid}')" title="Program Settings">${Icons.settings}</button>
                       </div>
                       <hr class="divider">
                       <div class="flex gap-2">
                         <span class="badge badge-blue">${cs.length} students</span>
-                        <button class="btn btn-secondary btn-sm" onclick="showClassStudents('${cid}')">View Students</button>
+                        <button class="btn btn-secondary btn-sm" onclick="showClassStudents('${pid}')">View Students</button>
                       </div>
                     </div>
                   </div>`;
@@ -819,7 +822,7 @@
     function renderMenteeFile() {
       const container = document.getElementById('page-content');
       const student = DB.Users.getById(selectedStudentId);
-      const course = DB.Courses.getById(student.courseId);
+      const program = DB.Programs.getById(student.programId);
 
       container.innerHTML = `
         <button class="btn btn-secondary btn-sm back-btn" onclick="exitMenteeFile()">${Icons.chevronLeft} ${menteeOrigin === 'class' ? 'Back to Class' : 'Back to Dashboard'}</button>
@@ -830,11 +833,11 @@
               ${renderAvatar(student.name, 'lg', null, student.id)}
               <div>
                 <h1 class="page-title" style="view-transition-name:name-${student.id};width:fit-content">${student.name}</h1>
-                <p class="page-subtitle">${course?.name || '—'} · ${course?.semesterCount || 6} Semesters</p>
+                <p class="page-subtitle">${program?.name || '—'} · ${program?.semesterCount || 6} Semesters</p>
               </div>
             </div>
             <div class="flex gap-2">
-              <button class="btn btn-secondary" onclick="PDFGen.generate('${selectedStudentId}')">${Icons.download} Export PDF</button>
+               <button class="btn btn-secondary" onclick="PDFGen.showExportModal('${selectedStudentId}')">${Icons.download} Export PDF</button>
             </div>
           </div>
         </div>
@@ -883,7 +886,7 @@
       const subContainer = document.getElementById('sub-tab-content');
       const student = DB.Users.getById(selectedStudentId);
       const profile = DB.Profiles.get(selectedStudentId) || {};
-      const course = DB.Courses.getById(student.courseId);
+      const program = DB.Programs.getById(student.programId);
 
       if (activeSubTab === 'profile') {
         subContainer.innerHTML = `
@@ -1308,39 +1311,45 @@
 
       <div class="section-card mt-6">
         <div class="section-card-header">
-          <div class="section-card-title">${Icons.fileText} Subject-wise Report — Semester ${currentRecordSemester}</div>
+          <div class="section-card-title">${Icons.fileText} Course-wise Report — Semester ${currentRecordSemester}</div>
           <div class="flex gap-2">
             <button class="btn btn-secondary btn-sm" onclick="showRiskConfig()" title="Change internals / components">${Icons.settings} Components</button>
-            <button class="btn btn-secondary btn-sm" onclick="addSubjectRow()">${Icons.plus} Add Subject</button>
+            <button class="btn btn-secondary btn-sm" onclick="addCourseRow()">${Icons.plus} Add Course</button>
           </div>
         </div>
         <div class="section-card-body" style="padding:0">
-          <div class="table-wrapper"><table class="data-table" id="subjects-table">
-            <thead><tr><th>Subject</th><th>Attendance %</th>${componentColumns().map(c=>`<th>${Str.escHtml(c)}</th>`).join('')}<th>External</th><th>Grade</th><th></th></tr></thead>
-            <tbody id="subjects-tbody">
-              ${(record.subjects || []).map(su => subjectRowHTML(su)).join('') || ''}
+          <div class="table-wrapper"><table class="data-table" id="courses-table">
+            <thead><tr><th>Course</th><th>Attendance %</th>${componentColumns().map(c=>`<th>${Str.escHtml(c)}</th>`).join('')}<th>External</th><th>Grade</th><th></th></tr></thead>
+            <tbody id="courses-tbody">
+              ${(() => {
+                const student = DB.Users.getById(selectedStudentId);
+                const coursesToRender = (record.courses && record.courses.length > 0)
+                  ? record.courses
+                  : DB.Classes.getCoursesForSemester(student?.classId, student?.programId, currentRecordSemester).map(name => ({ name }));
+                return coursesToRender.map(su => courseRowHTML(su)).join('');
+              })()}
             </tbody>
           </table></div>
-          <div style="padding:var(--space-4)"><button class="btn btn-primary btn-sm" onclick="saveSubjects()">Save Subject-wise Report</button></div>
+          <div style="padding:var(--space-4)"><button class="btn btn-primary btn-sm" onclick="saveCourses()">Save Course-wise Report</button></div>
         </div>
       </div>`;
   }
 
-  // Component columns come from the course config: N internals + other components
+  // Component columns come from the program config: N internals + other components
   function componentColumns() {
     const student = DB.Users.getById(selectedStudentId);
-    const cfg = DB.CourseConfig.get(student?.courseId);
+    const cfg = DB.ProgramConfig.get(student?.programId);
     const internals = Array.from({ length: cfg.numInternals || 1 }, (_, i) => `Internal ${i + 1}`);
     const others = (cfg.components || []).filter(c => !/^internal/i.test(c));
     return [...internals, ...others];
   }
 
-  function subjectRowHTML(su = {}) {
+  function courseRowHTML(su = {}) {
     const cols = componentColumns();
     const marks = { ...(su.marks || {}) };
     if (su.internal != null && su.internal !== '' && marks['Internal 1'] == null) marks['Internal 1'] = su.internal;
     return `<tr>
-      <td><input class="form-input" data-f="name" value="${su.name ? Str.escHtml(su.name) : ''}" placeholder="Subject"></td>
+      <td><input class="form-input" data-f="name" value="${su.name ? Str.escHtml(su.name) : ''}" placeholder="Course"></td>
       <td><input class="form-input" type="number" data-f="attendance" value="${su.attendance ?? ''}" style="max-width:90px"></td>
       ${cols.map(c => `<td><input class="form-input" type="number" data-comp="${Str.escHtml(c)}" value="${marks[c] ?? ''}" style="max-width:90px"></td>`).join('')}
       <td><input class="form-input" type="number" data-f="external" value="${su.external ?? ''}" style="max-width:90px"></td>
@@ -1348,12 +1357,12 @@
       <td><button class="btn btn-ghost btn-sm btn-icon" onclick="this.closest('tr').remove()">${Icons.trash}</button></td>
     </tr>`;
   }
-  function addSubjectRow() {
-    document.getElementById('subjects-tbody').insertAdjacentHTML('beforeend', subjectRowHTML());
+  function addCourseRow() {
+    document.getElementById('courses-tbody').insertAdjacentHTML('beforeend', courseRowHTML());
   }
-  function saveSubjects() {
-    const rows = [...document.querySelectorAll('#subjects-tbody tr')];
-    const subjects = rows.map(tr => {
+  function saveCourses() {
+    const rows = [...document.querySelectorAll('#courses-tbody tr')];
+    const courses = rows.map(tr => {
       const g = f => tr.querySelector(`[data-f="${f}"]`).value.trim();
       const marks = {};
       tr.querySelectorAll('[data-comp]').forEach(inp => { if (inp.value.trim() !== '') marks[inp.dataset.comp] = inp.value.trim(); });
@@ -1361,8 +1370,8 @@
       return { name: g('name'), attendance: g('attendance'), marks, internal, external: g('external'), grade: g('grade') };
     }).filter(s => s.name);
     const rec = DB.SemesterRecords.get(selectedStudentId, currentRecordSemester) || {};
-    DB.SemesterRecords.save(selectedStudentId, currentRecordSemester, { ...rec, subjects }, session.userId);
-    Toast.success('Saved', 'Subject-wise report updated.');
+    DB.SemesterRecords.save(selectedStudentId, currentRecordSemester, { ...rec, courses }, session.userId);
+    Toast.success('Saved', 'Course-wise report updated.');
   }
 
   function saveSemesterRecord(e) {
@@ -1385,7 +1394,7 @@
   // ── Extra Credit Modals & Actions ─────────────────────────────
   function showAddExtraCreditModal() {
     const student = DB.Users.getById(selectedStudentId);
-    const course = DB.Courses.getById(student.courseId);
+    const program = DB.Programs.getById(student.programId);
     const categories = DB.Settings.getExtraCreditCategories();
 
     Modal.create('add-ec', {
@@ -1395,7 +1404,7 @@
           <div class="form-group">
             <label class="form-label required">Semester</label>
             <select class="form-select" id="ec-sem">
-              ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+              ${Array.from({ length: program?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -1441,7 +1450,7 @@
   // ── Co-Curricular achievements ────────────────────────────────
   function showAddAwardModal() {
     const student = DB.Users.getById(selectedStudentId);
-    const course = DB.Courses.getById(student.courseId);
+    const program = DB.Programs.getById(student.programId);
     const categories = DB.Settings.getAchievementCategories();
 
     Modal.create('add-award', {
@@ -1451,7 +1460,7 @@
           <div class="form-group">
             <label class="form-label required">Semester</label>
             <select class="form-select" id="aw-sem">
-              ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+              ${Array.from({ length: program?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
             </select>
           </div>
           <div class="form-group">
@@ -1477,30 +1486,16 @@
     if (!title || !date) { Toast.error('Missing fields'); return; }
 
     DB.Achievements.create({ studentId: selectedStudentId, semester: sem, category: cat, title, date }, session.userId);
-    Toast.success('Added', 'Achievement has been saved.');
+    Toast.success('Added', 'Achievement has been added.');
     Modal.close('add-award');
     renderSubTabContent();
   }
 
-  function deleteAward(id) {
-    Modal.confirm({ title: 'Delete Entry', message: 'Delete this achievement entry?', confirmText: 'Delete', onConfirm: () => {
-      DB.Achievements.delete(id, session.userId);
-      Toast.success('Deleted');
-      renderSubTabContent();
-    }});
-  }
-
-  // ── Meetings Modals ───────────────────────────────────────────
-  function scheduleMeetingFor(studentId) {
-    selectedStudentId = studentId;
-    showAddMeetingModal();
-  }
-
-  function meetingFormBody(course, m = {}) {
+  function meetingFormBody(program, m = {}) {
     return `
       <div class="form-grid">
         <div class="form-group"><label class="form-label">Semester</label>
-          <select class="form-select" id="m-sem">${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}" ${m.semester===i+1?'selected':''}>Semester ${i+1}</option>`).join('')}</select>
+          <select class="form-select" id="m-sem">${Array.from({ length: program?.semesterCount || 6 }, (_, i) => `<option value="${i+1}" ${m.semester===i+1?'selected':''}>Semester ${i+1}</option>`).join('')}</select>
         </div>
         <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="m-date" value="${m.date || DateFmt.today()}"></div>
       </div>
@@ -1512,16 +1507,16 @@
       <div class="form-group"><label class="form-label">My Discussion Points (private to me)</label><textarea class="form-textarea" id="m-tpoints" rows="2" placeholder="Only you can see these — your agenda/topics">${m.discussionPointsTeacher ? Str.escHtml(m.discussionPointsTeacher) : ''}</textarea>
         <div class="form-hint">Private to you (the teacher). Not visible to the student.</div></div>`;
   }
-
+ 
   // Quick meeting note — for when a student walks in / meets and shares something
   function showQuickMeetingModal() {
-    const course = DB.Courses.getById(DB.Users.getById(selectedStudentId).courseId);
+    const program = DB.Programs.getById(DB.Users.getById(selectedStudentId).programId);
     Modal.create('quick-meeting', {
       title: 'Add Meeting Note',
       body: `
         <div class="form-grid">
           <div class="form-group"><label class="form-label">Semester</label>
-            <select class="form-select" id="qm-sem">${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}</select></div>
+            <select class="form-select" id="qm-sem">${Array.from({ length: program?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}</select></div>
           <div class="form-group"><label class="form-label">Date</label><input type="date" class="form-input" id="qm-date" value="${DateFmt.today()}"></div>
         </div>
         <div class="form-group"><label class="form-label">Discussion</label><textarea class="form-textarea" id="qm-notes" rows="2" placeholder="What the student shared / was discussed..."></textarea></div>
@@ -1544,13 +1539,13 @@
     Modal.close('quick-meeting');
     renderSubTabContent();
   }
-
+ 
   function showAddMeetingModal() {
     const student = DB.Users.getById(selectedStudentId);
-    const course = DB.Courses.getById(student.courseId);
+    const program = DB.Programs.getById(student.programId);
     Modal.create('add-meeting', {
       title: 'Schedule a Meeting',
-      body: meetingFormBody(course) + `<div class="alert alert-info">${Icons.info} The student will be emailed & notified by you (${session.name}).</div>`,
+      body: meetingFormBody(program) + `<div class="alert alert-info">${Icons.info} The student will be emailed & notified by you (${session.name}).</div>`,
       footer: `<button class="btn btn-secondary" onclick="Modal.close('add-meeting')">Cancel</button>
                <button class="btn btn-primary" onclick="saveMeeting()">Schedule Meeting</button>`,
     });
@@ -1583,10 +1578,10 @@
   function updateMeeting(id) {
     const m = DB.Meetings.getAll(selectedStudentId).find(x => x.id === id);
     if (!m) return;
-    const course = DB.Courses.getById(DB.Users.getById(selectedStudentId).courseId);
+    const program = DB.Programs.getById(DB.Users.getById(selectedStudentId).programId);
     Modal.create('edit-meeting', {
       title: 'Update Meeting Details',
-      body: meetingFormBody(course, m),
+      body: meetingFormBody(program, m),
       footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-meeting')">Cancel</button>
                <button class="btn btn-primary" onclick="doUpdateMeeting('${id}')">Save Changes</button>`,
     });
@@ -1600,14 +1595,14 @@
     renderSubTabContent();
   }
 
-  // ── Per-course settings ──────────────────────────────────────
-  function showCourseConfig(courseId) {
-    const course = DB.Courses.getById(courseId);
-    const cfg = DB.CourseConfig.get(courseId);
+  // ── Per-program settings ──────────────────────────────────────
+  function showProgramConfig(programId) {
+    const program = DB.Programs.getById(programId);
+    const cfg = DB.ProgramConfig.get(programId);
     const rc = DB.RiskConfig.get();
     const otherComps = (cfg.components || []).filter(x => !/^internal/i.test(x));
-    Modal.create('course-cfg', {
-      title: `Course Settings — ${course?.name || ''}`, size: 'md',
+    Modal.create('program-cfg', {
+      title: `Program Settings — ${program?.name || ''}`, size: 'md',
       body: `
         <div class="form-label mb-2">Assessment Components</div>
         <div class="form-grid">
@@ -1623,31 +1618,31 @@
           <div class="form-group"><label class="form-label">Min Internal Mark</label><input type="number" class="form-input" id="cco-mark" value="${rc.minInternalMark}"></div>
           <div class="form-group"><label class="form-label">Max Internals Failed</label><input type="number" class="form-input" id="cco-fail" value="${rc.maxInternalsFailed}"></div>
         </div>`,
-      footer: `<button class="btn btn-secondary" onclick="Modal.close('course-cfg')">Cancel</button>
-               <button class="btn btn-primary" onclick="saveCourseConfig('${courseId}')">Save</button>`,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('program-cfg')">Cancel</button>
+               <button class="btn btn-primary" onclick="saveProgramConfig('${programId}')">Save</button>`,
     });
   }
-  function saveCourseConfig(courseId) {
+  function saveProgramConfig(programId) {
     const num = parseInt(document.getElementById('cco-int').value) || 1;
     const others = (document.getElementById('cco-comp').value || '').split(',').map(s=>s.trim()).filter(Boolean);
     const components = [...Array.from({length:num},(_,i)=>`Internal ${i+1}`), ...others];
-    DB.CourseConfig.save(courseId, { numInternals: num, minAttendancePct: parseFloat(document.getElementById('cco-att').value), components }, session.userId);
+    DB.ProgramConfig.save(programId, { numInternals: num, minAttendancePct: parseFloat(document.getElementById('cco-att').value), components }, session.userId);
     DB.RiskConfig.save({
       minAttendancePct: parseFloat(document.getElementById('cco-ratt').value),
       attentionAttendancePct: parseFloat(document.getElementById('cco-attn').value),
       minInternalMark: parseFloat(document.getElementById('cco-mark').value),
       maxInternalsFailed: parseInt(document.getElementById('cco-fail').value),
     }, session.userId);
-    Toast.success('Saved', 'Course settings updated.');
-    Modal.close('course-cfg');
+    Toast.success('Saved', 'Program settings updated.');
+    Modal.close('program-cfg');
   }
 
-  // ── Course details & at-risk logic settings (Teacher & HOD) ──
+  // ── Program details & at-risk logic settings (Teacher & HOD) ──
   function showRiskConfig() {
     const rc = DB.RiskConfig.get();
-    const myCourses = [...new Set(myStudents().map(s => s.courseId))].map(id => DB.Courses.getById(id)).filter(Boolean);
+    const myPrograms = [...new Set(myStudents().map(s => s.programId))].map(id => DB.Programs.getById(id)).filter(Boolean);
     Modal.create('risk-cfg', {
-      title: 'At-Risk Logic & Course Details', size: 'md',
+      title: 'At-Risk Logic & Program Details', size: 'md',
       body: `
         <p class="text-sm text-muted mb-4">Set the thresholds that flag a student as <strong>Need Attention</strong> or <strong>At Risk</strong>.</p>
         <div class="form-grid">
@@ -1657,22 +1652,22 @@
           <div class="form-group"><label class="form-label">Max Internals Failed</label><input type="number" class="form-input" id="rc-fail" value="${rc.maxInternalsFailed}"></div>
         </div>
         <hr class="divider">
-        <div class="form-label mb-2">Course Details (No. of internals, components)</div>
-        ${myCourses.map(c => {
-          const cfg = DB.CourseConfig.get(c.id);
+        <div class="form-label mb-2">Program Details (No. of internals, components)</div>
+        ${myPrograms.map(p => {
+          const cfg = DB.ProgramConfig.get(p.id);
           const otherComps = (cfg.components || []).filter(x => !/^internal/i.test(x));
           return `<div style="border:1px solid var(--border-color);border-radius:var(--border-radius-md);padding:var(--space-3);margin-bottom:var(--space-3)">
-            <div class="font-semibold text-sm mb-2">${c.name}</div>
+            <div class="font-semibold text-sm mb-2">${p.name}</div>
             <div class="form-grid" style="align-items:end">
-              <div class="form-group"><label class="form-label">No. of Internals</label><input type="number" class="form-input" id="cc-int-${c.id}" value="${cfg.numInternals}" min="1" max="6"></div>
-              <div class="form-group"><label class="form-label">Min Attendance %</label><input type="number" class="form-input" id="cc-att-${c.id}" value="${cfg.minAttendancePct}"></div>
-              <div class="form-group"><label class="form-label">Other Components (comma-separated)</label><input type="text" class="form-input" id="cc-comp-${c.id}" value="${otherComps.join(', ')}" placeholder="Assignment, Seminar"></div>
+              <div class="form-group"><label class="form-label">No. of Internals</label><input type="number" class="form-input" id="cc-int-${p.id}" value="${cfg.numInternals}" min="1" max="6"></div>
+              <div class="form-group"><label class="form-label">Min Attendance %</label><input type="number" class="form-input" id="cc-att-${p.id}" value="${cfg.minAttendancePct}"></div>
+              <div class="form-group"><label class="form-label">Other Components (comma-separated)</label><input type="text" class="form-input" id="cc-comp-${p.id}" value="${otherComps.join(', ')}" placeholder="Assignment, Seminar"></div>
             </div>
           </div>`;
         }).join('') || '<p class="text-xs text-muted">No classes assigned.</p>'}`,
       footer: `<button class="btn btn-secondary" onclick="Modal.close('risk-cfg')">Cancel</button><button class="btn btn-primary" onclick="saveRiskConfig()">Save</button>`,
     });
-    window._rcCourseIds = myCourses.map(c => c.id);
+    window._rcProgramIds = myPrograms.map(p => p.id);
   }
   function saveRiskConfig() {
     DB.RiskConfig.save({
@@ -1681,13 +1676,13 @@
       minInternalMark: parseFloat(document.getElementById('rc-mark').value),
       maxInternalsFailed: parseInt(document.getElementById('rc-fail').value),
     }, session.userId);
-    (window._rcCourseIds || []).forEach(id => {
+    (window._rcProgramIds || []).forEach(id => {
       const num = parseInt(document.getElementById('cc-int-'+id).value) || 1;
       const others = (document.getElementById('cc-comp-'+id)?.value || '').split(',').map(s=>s.trim()).filter(Boolean);
       const components = [...Array.from({length:num},(_,i)=>`Internal ${i+1}`), ...others];
-      DB.CourseConfig.save(id, { numInternals: num, minAttendancePct: parseFloat(document.getElementById('cc-att-'+id).value), components }, session.userId);
+      DB.ProgramConfig.save(id, { numInternals: num, minAttendancePct: parseFloat(document.getElementById('cc-att-'+id).value), components }, session.userId);
     });
-    Toast.success('Saved', 'Risk logic and course details updated.');
+    Toast.success('Saved', 'Risk logic and program details updated.');
     Modal.close('risk-cfg');
   }
 
@@ -1702,7 +1697,7 @@
   // ── PTA Meetings ──────────────────────────────────────────────
   function showAddPtaModal() {
     const student = DB.Users.getById(selectedStudentId);
-    const course = DB.Courses.getById(student.courseId);
+    const program = DB.Programs.getById(student.programId);
 
     Modal.create('add-pta', {
       title: 'Log PTA / Parent Meeting',
@@ -1780,6 +1775,68 @@
     Toast.success('Saved', 'Qualitative records updated.');
   }
 
+    // ── Class Course Management Modals ───────────────────────────
+    let tempCourses = {};
+    window._mcActiveSem = "1";
+
+    window.manageClassCoursesModal = function(classId) {
+      const cls = DB.Classes.getById(classId);
+      const program = DB.Programs.getById(cls.programId);
+      const sems = program?.semesterCount || 6;
+      const classCourses = cls.semesterCourses || {};
+      const programCourses = program?.defaultCourses || {};
+      
+      tempCourses = {};
+      for (let s = 1; s <= sems; s++) {
+        tempCourses[s] = classCourses[s] || programCourses[s] || [];
+      }
+
+      const renderSemCourses = (sem) => {
+        const list = tempCourses[sem] || [];
+        const textarea = document.getElementById('mc-textarea');
+        if (textarea) textarea.value = list.join('\n');
+      };
+
+      window._mcActiveSem = "1";
+
+      Modal.create('manage-courses', {
+        title: `Courses for Class — ${cls.name}`,
+        size: 'md',
+        body: `
+          <div class="form-group">
+            <label class="form-label">Select Semester</label>
+            <select class="form-select" id="mc-sem-select" onchange="tempCourses[window._mcActiveSem] = document.getElementById('mc-textarea').value.split('\\n').map(s=>s.trim()).filter(Boolean); window._mcActiveSem = this.value; const list = tempCourses[this.value] || []; document.getElementById('mc-textarea').value = list.join('\\n');">
+              ${Array.from({ length: sems }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Courses (one per line)</label>
+            <textarea class="form-textarea" id="mc-textarea" rows="8" placeholder="e.g.&#10;Mathematics I&#10;Programming in C"></textarea>
+            <div class="form-hint">Enter each course name on a new line. Editing this will modify the course list specifically for this class.</div>
+          </div>
+        `,
+        footer: `
+          <button class="btn btn-secondary" onclick="Modal.close('manage-courses')">Cancel</button>
+          <button class="btn btn-primary" onclick="saveClassCourses('${classId}')">Save Courses</button>
+        `
+      });
+
+      renderSemCourses(1);
+    };
+
+    window.saveClassCourses = function(classId) {
+      const sem = window._mcActiveSem;
+      const textarea = document.getElementById('mc-textarea');
+      if (textarea) {
+        tempCourses[sem] = textarea.value.split('\n').map(s=>s.trim()).filter(Boolean);
+      }
+      DB.Classes.update(classId, { semesterCourses: tempCourses }, session.userId);
+      Toast.success('Saved', 'Class-specific courses updated successfully.');
+      Modal.close('manage-courses');
+      if (typeof openInchargeClass === 'function' && typeof selectedClassId !== 'undefined' && selectedClassId === classId) {
+        openInchargeClass(classId);
+      }
+    };
   </script>
 </body>
 </html>

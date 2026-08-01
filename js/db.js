@@ -10,7 +10,7 @@ const DB = (() => {
     settings: 'sb_settings',
     secureSettings: 'sb_secure_settings',
     departments: 'sb_departments',
-    courses: 'sb_courses',
+    programs: 'sb_programs',
     users: 'sb_users',
     mentorAssignments: 'sb_mentor_assignments',
     studentProfiles: 'sb_student_profiles',
@@ -62,7 +62,7 @@ const DB = (() => {
     const enabled = !!(cfg.url && cfg.anonKey && typeof window !== 'undefined' && window.supabase);
     const client = enabled ? window.supabase.createClient(cfg.url, cfg.anonKey) : null;
     const TABLE = {
-      [KEYS.departments]: 'departments', [KEYS.courses]: 'courses', [KEYS.classes]: 'classes',
+      [KEYS.departments]: 'departments', [KEYS.programs]: 'programs', [KEYS.classes]: 'classes',
       [KEYS.users]: 'users', [KEYS.mentorAssignments]: 'mentor_assignments',
       [KEYS.studentProfiles]: 'student_profiles', [KEYS.semesterRecords]: 'semester_records',
       [KEYS.extraCreditCourses]: 'extra_credit_courses', [KEYS.achievements]: 'achievements',
@@ -326,12 +326,12 @@ const DB = (() => {
     } else {
       const s = get('sb_session');
       if (s && s.expiresAt > Date.now()) {
-        // Backfill departmentId/courseId if missing (sessions created before the fix)
+        // Backfill departmentId/programId if missing (sessions created before the fix)
         if (s.departmentId === undefined) {
           const u = findById(KEYS.users, s.userId);
           if (u) {
             s.departmentId = u.departmentId || null;
-            s.courseId = u.courseId || null;
+            s.programId = u.programId || null;
             set('sb_session', s);
           }
         }
@@ -342,7 +342,7 @@ const DB = (() => {
   }
 
   function setCachedSession(user) {
-    cachedSession = { userId: user.id, role: user.role, name: user.name, email: user.email, departmentId: user.departmentId || null, courseId: user.courseId || null, expiresAt: Date.now() + 8 * 3600 * 1000 };
+    cachedSession = { userId: user.id, role: user.role, name: user.name, email: user.email, departmentId: user.departmentId || null, programId: user.programId || null, expiresAt: Date.now() + 8 * 3600 * 1000 };
     set('sb_session', cachedSession);
     return cachedSession;
   }
@@ -522,7 +522,7 @@ const DB = (() => {
         p_name: data.name,
         p_role: data.role,
         p_department_id: data.departmentId || null,
-        p_course_id: data.courseId || null,
+        p_program_id: data.programId || null,
         p_class_id: data.classId || null,
         p_parent_email: data.parentEmail || null,
         p_linked_student_id: data.linkedStudentId || null,
@@ -541,7 +541,7 @@ const DB = (() => {
         name: data.name,
         role: data.role,
         departmentId: data.departmentId || null,
-        courseId: data.courseId || null,
+        programId: data.programId || null,
         status: 'active',
         passwordHash: null,
         phone: data.phone || null,
@@ -566,8 +566,8 @@ const DB = (() => {
         continue;
       }
       const dept = findAll(KEYS.departments).find(d => d.name.toLowerCase() === (row.department || '').toLowerCase());
-      const course = findAll(KEYS.courses).find(c => c.name.toLowerCase() === (row.course || '').toLowerCase());
-      const res = await createUser({ email: row.email, name: row.name, role: row.role, departmentId: dept?.id, courseId: course?.id, phone: row.phone, parentEmail: row.parentemail || row['parent email'] }, actorId);
+      const program = findAll(KEYS.programs).find(p => p.name.toLowerCase() === (row.program || '').toLowerCase());
+      const res = await createUser({ email: row.email, name: row.name, role: row.role, departmentId: dept?.id, programId: program?.id, phone: row.phone, parentEmail: row.parentemail || row['parent email'] }, actorId);
       results.push({ row: i, email: row.email, ...res });
     }
     return results;
@@ -582,17 +582,17 @@ const DB = (() => {
     delete: (id, actor) => remove(KEYS.departments, id, actor),
   };
 
-  // ── Courses ──────────────────────────────────────────────────
-  const Courses = {
-    getAll: () => findAll(KEYS.courses),
-    getById: id => findById(KEYS.courses, id),
-    getByDepartment: deptId => findWhere(KEYS.courses, c => c.departmentId === deptId),
-    create: (data, actor) => insert(KEYS.courses, data, actor),
-    update: (id, data, actor) => update(KEYS.courses, id, data, actor),
-    delete: (id, actor) => remove(KEYS.courses, id, actor),
-    getSemesterCount: (courseId) => {
-      const c = findById(KEYS.courses, courseId);
-      return c ? c.semesterCount : 6;
+  // ── Programs ──────────────────────────────────────────────────
+  const Programs = {
+    getAll: () => findAll(KEYS.programs),
+    getById: id => findById(KEYS.programs, id),
+    getByDepartment: deptId => findWhere(KEYS.programs, p => p.departmentId === deptId),
+    create: (data, actor) => insert(KEYS.programs, data, actor),
+    update: (id, data, actor) => update(KEYS.programs, id, data, actor),
+    delete: (id, actor) => remove(KEYS.programs, id, actor),
+    getSemesterCount: (programId) => {
+      const p = findById(KEYS.programs, programId);
+      return p ? p.semesterCount : 6;
     },
   };
 
@@ -807,9 +807,9 @@ const DB = (() => {
       const cfg = RiskConfig.get(); // thresholds set by HOD/Teacher
       const att = parseFloat(latest.attendance != null && latest.attendance !== '' ? latest.attendance : 100);
       const gp = parseFloat(latest.gradePoint != null && latest.gradePoint !== '' ? latest.gradePoint : 10);
-      // Count failed internals across latest-semester subjects (if provided)
+      // Count failed internals across latest-semester courses (if provided)
       let internalsFailed = 0;
-      (latest.subjects || []).forEach(su => {
+      (latest.courses || []).forEach(su => {
         if (su.internal != null && su.internal !== '' && parseFloat(su.internal) < cfg.minInternalMark) internalsFailed++;
       });
       if (att < cfg.minAttendancePct || gp < 5 || internalsFailed > cfg.maxInternalsFailed) return 'red';
@@ -891,39 +891,47 @@ const DB = (() => {
     },
   };
 
-  // ── Course config defaults (internals / attendance / components) ──
-  const CourseConfig = {
+  // ── Program config defaults (internals / attendance / components) ──
+  const ProgramConfig = {
     defaults: () => ({ numInternals: 2, minAttendancePct: 75, internalPassMark: 40, components: ['Internal 1', 'Internal 2', 'Assignment', 'Seminar'] }),
-    get: (courseId) => {
-      const c = findById(KEYS.courses, courseId) || {};
-      const d = CourseConfig.defaults();
+    get: (programId) => {
+      const p = findById(KEYS.programs, programId) || {};
+      const d = ProgramConfig.defaults();
       return {
-        numInternals: c.numInternals ?? d.numInternals,
-        minAttendancePct: c.minAttendancePct ?? d.minAttendancePct,
-        internalPassMark: c.internalPassMark ?? d.internalPassMark,
-        components: c.components ?? d.components,
+        numInternals: p.numInternals ?? d.numInternals,
+        minAttendancePct: p.minAttendancePct ?? d.minAttendancePct,
+        internalPassMark: p.internalPassMark ?? d.internalPassMark,
+        components: p.components ?? d.components,
       };
     },
-    save: (courseId, cfg, actor) => update(KEYS.courses, courseId, cfg, actor),
+    save: (programId, cfg, actor) => update(KEYS.programs, programId, cfg, actor),
   };
 
-  // ── Classes (a real entity: Year + Course + Batch) ───────────
+  // ── Classes (a real entity: Year + Program + Batch) ───────────
   const Classes = {
     getAll: () => findAll(KEYS.classes),
     getById: id => findById(KEYS.classes, id),
     getByDepartment: deptId => findWhere(KEYS.classes, c => c.departmentId === deptId),
-    // Standard name = "<year> <COURSE> <batch>", e.g. "2 BCOM A"
-    buildName: (year, courseCode, batch) => `${year} ${courseCode}${batch ? ' ' + batch : ''}`.trim(),
+    // Standard name = "<PROGRAM>-<startYear>-<endYear> <batch>", e.g. "BBA-2024-2028 A"
+    buildName: (programCode, startYear, durationYears, batch) => {
+      const endYear = (parseInt(startYear) || new Date().getFullYear()) + (parseInt(durationYears) || 3);
+      return `${programCode}-${startYear}-${endYear}${batch ? ' ' + batch : ''}`.trim();
+    },
     create: (data, actor) => {
-      const course = findById(KEYS.courses, data.courseId);
-      const name = Classes.buildName(data.currentYear, data.courseCode || (course ? course.code : ''), data.batch);
+      const program = findById(KEYS.programs, data.programId);
+      const programCode = data.programCode || (program ? program.code : '');
+      const durationYears = parseInt(data.durationYears) || (program ? Math.ceil((program.semesterCount || 6) / 2) : 3);
+      const currentYear = parseInt(data.currentYear) || 1;
+      const startYear = parseInt(data.startYear) || (new Date().getFullYear() - currentYear + 1);
+      const name = Classes.buildName(programCode, startYear, durationYears, data.batch);
       return insert(KEYS.classes, {
-        courseId: data.courseId,
-        departmentId: course ? course.departmentId : (data.departmentId || null),
-        courseCode: data.courseCode || (course ? course.code : ''),
+        programId: data.programId,
+        departmentId: program ? program.departmentId : (data.departmentId || null),
+        programCode,
         batch: data.batch || 'A',
-        currentYear: parseInt(data.currentYear) || 1,
-        durationYears: parseInt(data.durationYears) || (course ? Math.ceil((course.semesterCount || 6) / 2) : 3),
+        currentYear,
+        startYear,
+        durationYears,
         promotionDate: data.promotionDate || '06-01', // MM-DD, default 1 June
         inchargeId: data.inchargeId || null,
         lastPromotedYear: new Date().getFullYear(),
@@ -932,13 +940,28 @@ const DB = (() => {
     },
     update: (id, data, actor) => {
       const merged = { ...findById(KEYS.classes, id), ...data };
-      merged.name = Classes.buildName(merged.currentYear, merged.courseCode, merged.batch);
+      merged.name = Classes.buildName(merged.programCode, merged.startYear, merged.durationYears, merged.batch);
       return update(KEYS.classes, id, merged, actor);
     },
     delete: (id, actor) => remove(KEYS.classes, id, actor),
     getStudents: classId => findWhere(KEYS.users, u => u.role === 'student' && u.classId === classId),
     assignStudent: (classId, studentId, actor) => update(KEYS.users, studentId, { classId }, actor),
     setIncharge: (classId, inchargeId, actor) => update(KEYS.classes, classId, { inchargeId }, actor),
+    getCoursesForSemester: (classId, programId, semester) => {
+      if (classId) {
+        const cls = findById(KEYS.classes, classId);
+        if (cls && cls.semesterCourses && cls.semesterCourses[semester] && cls.semesterCourses[semester].length > 0) {
+          return cls.semesterCourses[semester];
+        }
+      }
+      if (programId) {
+        const prog = findById(KEYS.programs, programId);
+        if (prog && prog.defaultCourses && prog.defaultCourses[semester] && prog.defaultCourses[semester].length > 0) {
+          return prog.defaultCourses[semester];
+        }
+      }
+      return [];
+    },
     // Auto-promotion: advance currentYear once per calendar year on/after promotionDate
     promoteIfDue: (actor = 'system') => {
       const now = new Date();
@@ -968,7 +991,12 @@ const DB = (() => {
   // ── Seed Data ────────────────────────────────────────────────
   async function seed() {
     // Skip only if flagged AND users actually exist in storage
-    if (get('sb_seeded') && getArr(KEYS.users).length > 0) return;
+    if (get('sb_seeded_v6') && getArr(KEYS.users).length > 0) return;
+
+    // Clear all existing local storage keys to ensure a clean DB state matching renamed entities
+    Object.values(KEYS).forEach(k => {
+      try { localStorage.removeItem(k); } catch (e) {}
+    });
 
     // Settings
     Settings.set({
@@ -991,11 +1019,35 @@ const DB = (() => {
     const deptArts = Departments.create({ name: 'Arts & Humanities', code: 'ARTS' }, 'system');
     const deptComm = Departments.create({ name: 'Commerce & Management', code: 'COM' }, 'system');
 
-    // Courses
-    const courseBSc = Courses.create({ departmentId: deptSci.id, name: 'BSc Computer Science', code: 'BSC_CS', semesterCount: 6 }, 'system');
-    const courseMSc = Courses.create({ departmentId: deptSci.id, name: 'MSc Physics', code: 'MSC_PHY', semesterCount: 4 }, 'system');
-    const courseMAEng = Courses.create({ departmentId: deptArts.id, name: 'MA English Literature', code: 'MA_ENG', semesterCount: 4 }, 'system');
-    const courseBBA = Courses.create({ departmentId: deptComm.id, name: 'BBA', code: 'BBA', semesterCount: 6 }, 'system');
+    // Programs
+    const programBSc = Programs.create({
+      departmentId: deptSci.id,
+      name: 'BSc Computer Science',
+      code: 'BSC_CS',
+      semesterCount: 6,
+      defaultCourses: {
+        1: ["Mathematics I", "Programming in C", "Digital Electronics", "English I"],
+        2: ["Mathematics II", "Data Structures", "Computer Organization", "English II"],
+        3: ["Discrete Mathematics", "Object Oriented Programming in C++", "Database Management Systems", "Software Engineering"],
+        4: ["Operating Systems", "Design and Analysis of Algorithms", "Java Programming", "System Software"],
+        5: ["Computer Networks", "Web Technology", "Software Testing", "Open Elective"],
+        6: ["Artificial Intelligence", "Information Security", "Project & Viva Voce", "Elective II"]
+      }
+    }, 'system');
+    const programMSc = Programs.create({
+      departmentId: deptSci.id,
+      name: 'MSc Physics',
+      code: 'MSC_PHY',
+      semesterCount: 4,
+      defaultCourses: {
+        1: ["Mathematical Physics", "Classical Mechanics", "Quantum Mechanics I"],
+        2: ["Statistical Mechanics", "Electrodynamics", "Quantum Mechanics II"],
+        3: ["Nuclear and Particle Physics", "Solid State Physics", "Spectroscopy"],
+        4: ["Computational Physics", "Advanced Electronics", "Project"]
+      }
+    }, 'system');
+    const programMAEng = Programs.create({ departmentId: deptArts.id, name: 'MA English Literature', code: 'MA_ENG', semesterCount: 4 }, 'system');
+    const programBBA = Programs.create({ departmentId: deptComm.id, name: 'BBA', code: 'BBA', semesterCount: 6 }, 'system');
 
     // Users: Admin
     const adminUser = insert(KEYS.users, {
@@ -1005,7 +1057,7 @@ const DB = (() => {
       role: 'admin',
       status: 'active',
       departmentId: null,
-      courseId: null,
+      programId: null,
       passwordHash: 'bc78e58d55cde1346e68f8e5fe588dedf62fa457aa646a500a53347faff6ee24',
     }, 'system');
 
@@ -1017,7 +1069,7 @@ const DB = (() => {
       role: 'mentor',
       status: 'active',
       departmentId: deptSci.id,
-      courseId: null,
+      programId: null,
     }, 'system');
 
     const mentor2 = insert(KEYS.users, {
@@ -1027,7 +1079,7 @@ const DB = (() => {
       role: 'mentor',
       status: 'active',
       departmentId: deptArts.id,
-      courseId: null,
+      programId: null,
     }, 'system');
 
     // Users: HOD
@@ -1038,7 +1090,7 @@ const DB = (() => {
       role: 'hod',
       status: 'active',
       departmentId: deptSci.id,
-      courseId: null,
+      programId: null,
     }, 'system');
 
     // Users: Students
@@ -1049,7 +1101,7 @@ const DB = (() => {
       role: 'student',
       status: 'active',
       departmentId: deptSci.id,
-      courseId: courseBSc.id,
+      programId: programBSc.id,
       parentEmail: 'krishna.parent@gmail.com',
     }, 'system');
 
@@ -1060,7 +1112,7 @@ const DB = (() => {
       role: 'student',
       status: 'active',
       departmentId: deptSci.id,
-      courseId: courseBSc.id,
+      programId: programBSc.id,
       parentEmail: 'menon.parent@gmail.com',
     }, 'system');
 
@@ -1071,7 +1123,7 @@ const DB = (() => {
       role: 'student',
       status: 'active',
       departmentId: deptArts.id,
-      courseId: courseMAEng.id,
+      programId: programMAEng.id,
       parentEmail: 'pillai.parent@gmail.com',
     }, 'system');
 
@@ -1082,7 +1134,7 @@ const DB = (() => {
       role: 'student',
       status: 'active',
       departmentId: deptSci.id,
-      courseId: courseBSc.id,
+      programId: programBSc.id,
       parentEmail: 'babu.parent@gmail.com',
     }, 'system');
 
@@ -1095,7 +1147,7 @@ const DB = (() => {
       status: 'active',
       linkedStudentId: student1.id,
       departmentId: null,
-      courseId: null,
+      programId: null,
     }, 'system');
 
     // NOTE: Principal role is defined in the model & email matrix (DB.HIERARCHY).
@@ -1105,9 +1157,9 @@ const DB = (() => {
     // Parent access approvals (demo): student1 approved, others pending
     update(KEYS.users, student1.id, { parentApproved: true, parentApprovedBy: mentor1.id, parentApprovedAt: new Date().toISOString() }, mentor1.id);
 
-    // Classes (Year + Course + Batch)
-    const classCS = Classes.create({ courseId: courseBSc.id, courseCode: 'BSC-CS', batch: 'A', currentYear: 1, durationYears: 3, promotionDate: '06-01', inchargeId: mentor1.id }, adminUser.id);
-    const classEng = Classes.create({ courseId: courseMAEng.id, courseCode: 'MA-ENG', batch: 'A', currentYear: 1, durationYears: 2, promotionDate: '06-01', inchargeId: mentor2.id }, adminUser.id);
+    // Classes (Year + Program + Batch)
+    const classCS = Classes.create({ programId: programBSc.id, programCode: 'BSC_CS', startYear: 2024, batch: 'A', currentYear: 2, durationYears: 3, promotionDate: '06-01', inchargeId: mentor1.id }, adminUser.id);
+    const classEng = Classes.create({ programId: programMAEng.id, programCode: 'MA_ENG', startYear: 2025, batch: 'A', currentYear: 1, durationYears: 2, promotionDate: '06-01', inchargeId: mentor2.id }, adminUser.id);
     Classes.assignStudent(classCS.id, student1.id, adminUser.id);
     Classes.assignStudent(classCS.id, student2.id, adminUser.id);
     Classes.assignStudent(classCS.id, student4.id, adminUser.id);
@@ -1175,25 +1227,25 @@ const DB = (() => {
     }, mentor1.id);
 
     // Semester Records
-    SemesterRecords.save(student1.id, 1, { gradePoint: 9.2, grade: 'O', remarks: 'Excellent performance', attendance: 92.5, subjects: [
+    SemesterRecords.save(student1.id, 1, { gradePoint: 9.2, grade: 'O', remarks: 'Excellent performance', attendance: 92.5, courses: [
       { name: 'Programming in C', attendance: 94, internal: 48, external: 88, grade: 'O' },
       { name: 'Mathematics I', attendance: 90, internal: 44, external: 82, grade: 'A+' },
       { name: 'Digital Electronics', attendance: 93, internal: 46, external: 85, grade: 'A+' },
     ] }, mentor1.id);
-    SemesterRecords.save(student1.id, 2, { gradePoint: 8.8, grade: 'A+', remarks: 'Very Good. Maintain consistency.', attendance: 88.0, subjects: [
+    SemesterRecords.save(student1.id, 2, { gradePoint: 8.8, grade: 'A+', remarks: 'Very Good. Maintain consistency.', attendance: 88.0, courses: [
       { name: 'Data Structures', attendance: 89, internal: 45, external: 80, grade: 'A+' },
       { name: 'Mathematics II', attendance: 86, internal: 41, external: 78, grade: 'A' },
     ] }, mentor1.id);
-    SemesterRecords.save(student2.id, 1, { gradePoint: 7.1, grade: 'B+', remarks: 'Good. Needs improvement in Mathematics.', attendance: 80.5, subjects: [
+    SemesterRecords.save(student2.id, 1, { gradePoint: 7.1, grade: 'B+', remarks: 'Good. Needs improvement in Mathematics.', attendance: 80.5, courses: [
       { name: 'Programming in C', attendance: 82, internal: 38, external: 66, grade: 'B+' },
       { name: 'Mathematics I', attendance: 74, internal: 32, external: 55, grade: 'C' },
     ] }, mentor1.id);
-    SemesterRecords.save(student2.id, 2, { gradePoint: 6.8, grade: 'B', remarks: 'Satisfactory. Must focus more.', attendance: 74.0, subjects: [
+    SemesterRecords.save(student2.id, 2, { gradePoint: 6.8, grade: 'B', remarks: 'Satisfactory. Must focus more.', attendance: 74.0, courses: [
       { name: 'Data Structures', attendance: 72, internal: 34, external: 58, grade: 'C+' },
       { name: 'Mathematics II', attendance: 70, internal: 30, external: 52, grade: 'C' },
     ] }, mentor1.id);
     SemesterRecords.save(student3.id, 1, { gradePoint: 9.6, grade: 'O', remarks: 'Outstanding. Top of batch.', attendance: 96.0 }, mentor2.id);
-    SemesterRecords.save(student4.id, 1, { gradePoint: 5.4, grade: 'C+', remarks: 'Needs counseling and support.', attendance: 68.0, subjects: [
+    SemesterRecords.save(student4.id, 1, { gradePoint: 5.4, grade: 'C+', remarks: 'Needs counseling and support.', attendance: 68.0, courses: [
       { name: 'Programming in C', attendance: 66, internal: 28, external: 45, grade: 'D' },
       { name: 'Mathematics I', attendance: 70, internal: 35, external: 50, grade: 'C' },
     ] }, mentor1.id);
@@ -1230,13 +1282,6 @@ const DB = (() => {
       remarks: 'Anjali is a model student with exceptional holistic development. Highly recommended for merit scholarship.',
     }, mentor1.id);
 
-    MentoringNotes.save(student2.id, 1, {
-      personalityTraits: { openness: 3, sociability: 4, amiability: 4, selfDiscipline: 3, selfReliance: 3 },
-      scholarTraits: { inquisitiveness: 3, hardWork: 3, punctuality: 2, enthusiasm: 3, analyticalSkills: 3, creativity: 3, teamSpirit: 4 },
-      participation: 'Member of college football team.',
-      remarks: 'Rahul needs to improve discipline and study habits. Attendance improvement is a priority.',
-    }, mentor1.id);
-
     // Signatures
     Signatures.signMentor(student1.id, mentor1.id, null, mentor1.id);
 
@@ -1245,7 +1290,7 @@ const DB = (() => {
     Notifications.create(mentor1.id, 'Pending Meeting Confirmation', 'Anjali Krishna has not confirmed the meeting on 2025-01-20.', 'info');
     Notifications.create(mentor1.id, 'PTA Acknowledgement Pending', 'Rahul Menon\'s parent has not acknowledged the PTA meeting.', 'warning');
 
-    set('sb_seeded', true);
+    set('sb_seeded_v6', true);
     console.info('[DB] Seed data loaded successfully.');
   }
 
@@ -1259,7 +1304,7 @@ const DB = (() => {
       if (result === TIMEOUT) {
         console.warn('[SB] hydrate timed out — loading local/seed data instead.');
       } else if (result === true && getArr(KEYS.users).length > 0) {
-        set('sb_seeded', true); // only skip seeding if Supabase actually returned users
+        set('sb_seeded_v6', true); // only skip seeding if Supabase actually returned users
       }
     } catch (e) { console.warn('[SB] init hydrate failed', e); }
     await seed();
@@ -1280,12 +1325,12 @@ const DB = (() => {
     getDefaultPassword: () => DEFAULT_PASSWORD,
 
     // Modules
-    Departments, Courses, Users, Assignments,
+    Departments, Programs, Users, Assignments,
     Profiles, SemesterRecords, ExtraCredit, Achievements,
     Meetings, PTAMeetings, Progression, MentoringNotes,
     Signatures, Settings, Notifications, Analytics,
     CustomFields, AuditLog,
-    Comms, ParentLinks, CourseConfig, RiskConfig, HIERARCHY, Classes,
+    Comms, ParentLinks, ProgramConfig, RiskConfig, HIERARCHY, Classes,
   };
 })();
 

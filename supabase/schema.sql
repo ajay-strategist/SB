@@ -24,7 +24,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'departments','courses','classes','users','mentor_assignments',
+    'departments','programs','classes','users','mentor_assignments',
     'student_profiles','semester_records','extra_credit_courses','achievements',
     'mentor_meetings','pta_meetings','progression_records','mentoring_notes',
     'signatures','audit_log','invite_tokens','password_resets',
@@ -100,12 +100,12 @@ $$;
 
 -- 5. Establish Row Level Security Policies
 
--- DEPARTMENTS, COURSES, CLASSES
+-- DEPARTMENTS, PROGRAMS, CLASSES
 create policy "read_all_depts" on departments for select to authenticated using (true);
 create policy "write_admin_depts" on departments for all to authenticated using (public.get_my_role() = 'admin') with check (public.get_my_role() = 'admin');
 
-create policy "read_all_courses" on courses for select to authenticated using (true);
-create policy "write_admin_courses" on courses for all to authenticated using (public.get_my_role() = 'admin') with check (public.get_my_role() = 'admin');
+create policy "read_all_programs" on programs for select to authenticated using (true);
+create policy "write_admin_programs" on programs for all to authenticated using (public.get_my_role() = 'admin') with check (public.get_my_role() = 'admin');
 
 create policy "read_all_classes" on classes for select to authenticated using (true);
 create policy "write_staff_classes" on classes for all to authenticated using (public.get_my_role() in ('admin', 'principal', 'hod')) with check (public.get_my_role() in ('admin', 'principal', 'hod'));
@@ -382,7 +382,7 @@ create or replace function public.admin_create_user(
   p_name text,
   p_role text,
   p_department_id text,
-  p_course_id text,
+  p_program_id text,
   p_class_id text,
   p_parent_email text,
   p_linked_student_id text,
@@ -484,7 +484,7 @@ begin
       'role', p_role,
       'status', 'invited',
       'departmentId', p_department_id,
-      'courseId', p_course_id,
+      'programId', p_program_id,
       'classId', p_class_id,
       'phone', p_phone,
       'parentEmail', p_parent_email,

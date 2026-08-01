@@ -197,9 +197,18 @@ const Theme = {
 };
 
 // ── Avatar Render ─────────────────────────────────────────────
-function renderAvatar(name, size = 'md', photoUrl = null, viewTransitionId = null) {
-  const style = viewTransitionId ? ` style="view-transition-name: avatar-${viewTransitionId}"` : '';
-  if (photoUrl) return `<img src="${photoUrl}" class="avatar avatar-${size}" alt="${Str.escHtml(name)}"${style}>`;
+function renderAvatar(name, size = 'md', photoUrl = null, studentId = null) {
+  const style = studentId ? ` style="view-transition-name: avatar-${studentId}"` : '';
+  let url = photoUrl;
+  if (!url && studentId && typeof DB !== 'undefined') {
+    const profile = DB.Profiles.get(studentId);
+    if (profile && profile.avatarUrl) url = profile.avatarUrl;
+  }
+  if (!url && typeof session !== 'undefined' && session && (session.userId === studentId || session.name === name)) {
+    const profile = DB.Profiles.get(session.userId);
+    if (profile && profile.avatarUrl) url = profile.avatarUrl;
+  }
+  if (url) return `<img src="${url}" class="avatar avatar-${size}" alt="${Str.escHtml(name)}"${style}>`;
   return `<div class="avatar-placeholder avatar-${size}"${style}>${Str.initials(name)}</div>`;
 }
 
@@ -312,23 +321,44 @@ function exportCSV(rows, filename = 'export.csv') {
 
 // ── PDF Generation ────────────────────────────────────────────
 const PDFGen = {
-  generate: async (studentId) => {
+  showExportModal: (studentId) => {
+    Modal.create('pdf-export', {
+      title: 'Export PDF Report',
+      size: 'md',
+      body: `
+        <div style="padding:var(--space-2)">
+          <p style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-4)">Select the report format to export for this student:</p>
+          <div class="flex flex-column gap-3">
+            <button class="btn btn-primary" onclick="PDFGen.generate('${studentId}', 'full'); Modal.close('pdf-export');" style="width:100%;justify-content:center;padding:var(--space-3)">
+              ${Icons.download} &nbsp; Export Full Mentorship Report
+            </button>
+            <p class="text-xs text-muted" style="margin-top:-8px;margin-bottom:var(--space-3);padding-left:var(--space-1)">Includes Personal details, Family details, Entry Qualifications, Semester & Course Academic Marks, Meeting logs, and Achievements.</p>
+            
+            <button class="btn btn-secondary" onclick="PDFGen.generate('${studentId}', 'academic'); Modal.close('pdf-export');" style="width:100%;justify-content:center;padding:var(--space-3)">
+              ${Icons.download} &nbsp; Export Academic Report Only
+            </button>
+            <p class="text-xs text-muted" style="margin-top:-8px;margin-bottom:var(--space-1);padding-left:var(--space-1)">Includes basic academic header information, SGPA/Attendance summary, and detailed course-wise semester marks tables only.</p>
+          </div>
+        </div>
+      `,
+      footer: `<button class="btn btn-secondary" onclick="Modal.close('pdf-export')">Cancel</button>`
+    });
+  },
+  generate: async (studentId, type = 'full') => {
     const student = DB.Users.getById(studentId);
     if (!student) { Toast.error('Student not found'); return; }
 
     const profile = DB.Profiles.get(studentId) || {};
-    const course = DB.Courses.getById(student.courseId);
+    const program = DB.Programs.getById(student.programId);
     const dept = DB.Departments.getById(student.departmentId);
     const mentor = (() => { const mid = DB.Assignments.getMentor(studentId); return mid ? DB.Users.getById(mid) : null; })();
-    const semCount = course ? course.semesterCount : 6;
+    const semCount = program ? program.semesterCount : 6;
     const semRecords = DB.SemesterRecords.getAll(studentId);
     const meetings = DB.Meetings.getAll(studentId);
     const ptaMeetings = DB.PTAMeetings.getAll(studentId);
     const achievements = DB.Achievements.getAll(studentId);
-    const notes = DB.MentoringNotes.getAll(studentId);
-    const sig = DB.Signatures.get(studentId);
     const collegeInfo = DB.Settings.getCollegeInfo();
-    // Embed the logo as a data URL so it reliably renders inside the print window
+    
     let logoData = '';
     try {
       const resp = await fetch(new URL('../SB Logo.png', window.location.href).href);
@@ -337,13 +367,63 @@ const PDFGen = {
     } catch (e) { logoData = ''; }
     const ov = (typeof StudentReport !== 'undefined') ? StudentReport.overview(studentId) : { total: semRecords.length, passed: 0, failed: 0 };
 
-    // Build HTML for PDF
+    // Prepare course-wise detailed tables for each semester
+    const cfg = DB.ProgramConfig.get(student.programId);
+    const cols = [...Array.from({length: cfg?.numInternals||1}, (_,i)=>`Internal ${i+1}`), ...((cfg?.components||[]).filter(c=>!/^internal/i.test(c)))];
+    const headerColSpan = cols.length + 4;
+
+    const academicTablesHTML = Array.from({ length: semCount }, (_, i) => {
+      const r = semRecords.find(rec => rec.semester === i + 1) || {};
+      const courses = r.courses || [];
+      
+      const courseRows = courses.map(su => {
+        const marks = su.marks || (su.internal != null ? {'Internal 1': su.internal} : {});
+        return `
+          <tr>
+            <td style="font-weight:600;padding-left:16px;text-align:left">${Str.escHtml(su.name || '—')}</td>
+            <td>${su.attendance != null ? su.attendance + '%' : '—'}</td>
+            ${cols.map(c => `<td>${Str.escHtml(marks[c] ?? '—')}</td>`).join('')}
+            <td>${su.external ?? '—'}</td>
+            <td style="font-weight:600">${Str.escHtml(su.grade || '—')}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div style="margin-bottom:20px;page-break-inside:avoid">
+          <h3 style="background:#f1f5f9;padding:6px 12px;margin:10px 0 0;font-size:11px;border-left:3px solid #1e1b4b;display:flex;justify-content:space-between">
+            <span>Semester ${i + 1}</span>
+            <span style="font-weight:normal;font-size:10.5px">SGPA: <strong>${r.gradePoint || '—'}</strong> | Grade: <strong>${r.grade || '—'}</strong> | Attendance: <strong>${r.attendance ? r.attendance + '%' : '—'}</strong></span>
+          </h3>
+          <table style="margin-top:0">
+            <thead>
+              <tr>
+                <th style="width:250px">Course Name</th>
+                <th>Attendance</th>
+                ${cols.map(c => `<th>${c}</th>`).join('')}
+                <th>External</th>
+                <th>Grade</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${courseRows || `<tr><td colspan="${headerColSpan}" style="text-align:center;color:#94a3b8">No course-wise details logged for this semester.</td></tr>`}
+              <tr>
+                <td colspan="${headerColSpan}" style="background:#fafafa;padding:6px 12px;font-size:11px;font-style:italic;text-align:left">
+                  <strong>Semester Remarks:</strong> ${Str.escHtml(r.remarks || 'No remarks logged.')}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      `;
+    }).join('');
+
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
-        <title>Mentor File — ${Str.escHtml(student.name)}</title>
+        <title>${type === 'academic' ? 'Academic Report' : 'Mentor File'} — ${Str.escHtml(student.name)}</title>
         <style>
           * { box-sizing: border-box; }
           body { font-family: Georgia, 'Times New Roman', serif; color: #1f2937; margin: 0; padding: 30px 30px; font-size: 12px; }
@@ -355,7 +435,7 @@ const PDFGen = {
           .brand-name { font-size: 22px; font-weight: 700; color: #1e1b4b; letter-spacing: 0.2px; }
           .brand-sub { color: #6b7280; font-size: 11px; margin-top: 3px; letter-spacing: 0.3px; }
           .doc-badge { margin-left: auto; text-align: right; }
-          .doc-title { font-size: 16px; font-weight: 700; color: #1e1b4b; letter-spacing: 3px; }
+          .doc-title { font-size: 15px; font-weight: 700; color: #1e1b4b; letter-spacing: 2.5px; }
           .doc-year { color: #6b7280; font-size: 11px; margin-top: 3px; }
           .stamp { display: inline-block; margin-top: 6px; border: 1.5px solid #C9A227; color: #9a7b12; border-radius: 5px; padding: 2px 10px; font-size: 8.5px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: bold; }
           .rule { height: 3px; background: linear-gradient(90deg, #1e1b4b, #4F46E5 55%, #C9A227); border-radius: 2px; }
@@ -369,8 +449,8 @@ const PDFGen = {
           .label { font-size: 9px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.08em; font-family: Arial, sans-serif; }
           .value { font-size: 12.5px; color: #111827; margin-top: 2px; }
           table { width: 100%; border-collapse: collapse; margin: 6px 0 4px; }
-          th { background: #1e1b4b; color: #fff; padding: 8px 10px; font-size: 9.5px; text-align: left; text-transform: uppercase; letter-spacing: 0.05em; font-family: Arial, sans-serif; }
-          td { padding: 7px 10px; border: 1px solid #e5e7eb; font-size: 11px; }
+          th { background: #1e1b4b; color: #fff; padding: 8px 10px; font-size: 9.5px; text-align: center; text-transform: uppercase; letter-spacing: 0.05em; font-family: Arial, sans-serif; }
+          td { padding: 7px 10px; border: 1px solid #e5e7eb; font-size: 11px; text-align: center; }
           tr:nth-child(even) td { background: #f8fafc; }
           .badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 10px; font-weight: bold; }
           .badge-green { background: #d1fae5; color: #065f46; }
@@ -384,7 +464,7 @@ const PDFGen = {
         <div class="header">
           ${logoData ? `<img class="logo" src="${logoData}" alt="College logo">` : `<div class="brand-name">${Str.escHtml(collegeInfo.name)}</div>`}
           <div class="doc-badge">
-            <div class="doc-title">MENTOR'S FILE</div>
+            <div class="doc-title">${type === 'academic' ? 'ACADEMIC REPORT' : "MENTOR'S FILE"}</div>
             <div class="doc-year">Academic Year ${DateFmt.currentYear()}–${DateFmt.currentYear() + 1}</div>
             <div><span class="stamp">Confidential</span></div>
           </div>
@@ -399,70 +479,96 @@ const PDFGen = {
           <div class="box"><div class="n">${Str.escHtml(semRecords[semRecords.length-1]?.attendance ?? '—')}${semRecords[semRecords.length-1]?.attendance!=null?'%':''}</div><div class="l">Latest Attendance</div></div>
         </div>
 
-        <h2>A. Personal Details</h2>
-        <div class="grid2">
-          ${[
-            ['Name', student.name],
-            ['Roll No.', profile.rollNo || '—'],
-            ['Department', dept?.name || '—'],
-            ['Course', course?.name || '—'],
-            ['Class', profile.className || '—'],
-            ['Blood Group', profile.bloodGroup || '—'],
-            ['Religion', profile.religion || '—'],
-            ['Community', profile.community || '—'],
-            ['Residence', profile.residenceType === 'hosteler' ? `Hosteler (${profile.hostelName || ''})` : 'Day Scholar'],
-            ['Life Goal', profile.lifeGoal || '—'],
-            ['Hobbies', profile.hobbies || '—'],
-            ['Mentor', mentor?.name || '—']
-          ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
-        </div>
+        ${type === 'academic' ? `
+          <h2>Student Details</h2>
+          <div class="grid2">
+            ${[
+              ['Name', student.name],
+              ['Roll No.', profile.rollNo || '—'],
+              ['Department', dept?.name || '—'],
+              ['Program', program?.name || '—'],
+              ['Class', profile.className || '—'],
+              ['Mentor', mentor?.name || '—']
+            ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
+          </div>
+        ` : `
+          <h2>A. Personal Details</h2>
+          <div class="grid2">
+            ${[
+              ['Name', student.name],
+              ['Roll No.', profile.rollNo || '—'],
+              ['Department', dept?.name || '—'],
+              ['Program', program?.name || '—'],
+              ['Class', profile.className || '—'],
+              ['Blood Group', profile.bloodGroup || '—'],
+              ['Religion', profile.religion || '—'],
+              ['Community', profile.community || '—'],
+              ['Residence', profile.residenceType === 'hosteler' ? `Hosteler (${profile.hostelName || ''})` : 'Day Scholar'],
+              ['Life Goal', profile.lifeGoal || '—'],
+              ['Hobbies', profile.hobbies || '—'],
+              ['Mentor', mentor?.name || '—']
+            ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
+          </div>
 
-        <h2>B. Family Details</h2>
-        <div class="grid2">
-          ${[
-            ["Father's Name", profile.fatherName || '—'],
-            ["Father's Occupation", profile.fatherOccupation || '—'],
-            ["Father's Phone", profile.fatherPhone || '—'],
-            ["Mother's Name", profile.motherName || '—'],
-            ["Mother's Occupation", profile.motherOccupation || '—'],
-            ["Permanent Address", profile.permanentAddress || '—'],
-            ["Communication Address", profile.communicationAddress || '—']
-          ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
-        </div>
+          <h2>B. Family Details</h2>
+          <div class="grid2">
+            ${[
+              ["Father's Name", profile.fatherName || '—'],
+              ["Father's Occupation", profile.fatherOccupation || '—'],
+              ["Father's Phone", profile.fatherPhone || '—'],
+              ["Mother's Name", profile.motherName || '—'],
+              ["Mother's Occupation", profile.motherOccupation || '—'],
+              ["Permanent Address", profile.permanentAddress || '—'],
+              ["Communication Address", profile.communicationAddress || '—']
+            ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
+          </div>
 
-        <h2>C. Entry Qualifications</h2>
-        <table>
-          <tr><th>Exam</th><th>School/Board</th><th>Percentage</th><th>Grade</th></tr>
-          <tr><td>SSLC</td><td>${Str.escHtml(profile.sslcSchool || '—')}</td><td>${Str.escHtml(profile.sslcPercentage || '—')}</td><td>${Str.escHtml(profile.sslcGrade || '—')}</td></tr>
-          <tr><td>Plus Two (+2)</td><td>${Str.escHtml(profile.plusTwoSchool || '—')}</td><td>${Str.escHtml(profile.plusTwoPercentage || '—')}</td><td>${Str.escHtml(profile.plusTwoGrade || '—')}</td></tr>
-        </table>
+          <h2>C. Entry Qualifications</h2>
+          <table>
+            <thead>
+              <tr><th>Exam</th><th>School/Board</th><th>Percentage</th><th>Grade</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SSLC</td><td>${Str.escHtml(profile.sslcSchool || '—')}</td><td>${Str.escHtml(profile.sslcPercentage || '—')}</td><td>${Str.escHtml(profile.sslcGrade || '—')}</td></tr>
+              <tr><td>Plus Two (+2)</td><td>${Str.escHtml(profile.plusTwoSchool || '—')}</td><td>${Str.escHtml(profile.plusTwoPercentage || '—')}</td><td>${Str.escHtml(profile.plusTwoGrade || '—')}</td></tr>
+            </tbody>
+          </table>
+        `}
 
-        <h2>D. Academic Performance & Attendance</h2>
-        <table>
-          <tr><th>Semester</th><th>Grade Point</th><th>Grade</th><th>Attendance %</th><th>Remarks</th></tr>
-          ${Array.from({ length: semCount }, (_, i) => {
-            const r = semRecords.find(r => r.semester === i + 1);
-            return `<tr><td>Semester ${i + 1}</td><td>${Str.escHtml(r?.gradePoint || '—')}</td><td>${Str.escHtml(r?.grade || '—')}</td><td>${r?.attendance ? r.attendance + '%' : '—'}</td><td>${Str.escHtml(r?.remarks || '—')}</td></tr>`;
-          }).join('')}
-        </table>
+        <h2>Academic Performance & Attendance (Course-wise Details)</h2>
+        ${academicTablesHTML}
 
-        <h2>E. Mentor Meeting Log</h2>
-        <table>
-          <tr><th>Semester</th><th>Date</th><th>Notes</th><th>Student Confirmed</th></tr>
-          ${meetings.map(m => `<tr><td>Sem ${m.semester}</td><td>${DateFmt.format(m.date)}</td><td>${Str.escHtml(m.notes || '—')}</td><td>${m.studentConfirmed ? '✓ Yes' : 'Pending'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No meetings recorded</td></tr>'}
-        </table>
+        ${type === 'full' ? `
+          <h2>E. Mentor Meeting Log</h2>
+          <table>
+            <thead>
+              <tr><th>Semester</th><th>Date</th><th>Notes</th><th>Student Confirmed</th></tr>
+            </thead>
+            <tbody>
+              ${meetings.map(m => `<tr><td>Sem ${m.semester}</td><td>${DateFmt.format(m.date)}</td><td style="text-align:left">${Str.escHtml(m.notes || '—')}</td><td>${m.studentConfirmed ? '✓ Yes' : 'Pending'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No meetings recorded</td></tr>'}
+            </tbody>
+          </table>
 
-        <h2>F. PTA Meeting Log</h2>
-        <table>
-          <tr><th>Semester</th><th>Date</th><th>Notes</th><th>Parent Acknowledged</th></tr>
-          ${ptaMeetings.map(m => `<tr><td>Sem ${m.semester}</td><td>${DateFmt.format(m.date)}</td><td>${Str.escHtml(m.notes || '—')}</td><td>${m.parentAcknowledged ? '✓ Yes' : 'Pending'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No PTA meetings recorded</td></tr>'}
-        </table>
+          <h2>F. PTA Meeting Log</h2>
+          <table>
+            <thead>
+              <tr><th>Semester</th><th>Date</th><th>Notes</th><th>Parent Acknowledged</th></tr>
+            </thead>
+            <tbody>
+              ${ptaMeetings.map(m => `<tr><td>Sem ${m.semester}</td><td>${DateFmt.format(m.date)}</td><td style="text-align:left">${Str.escHtml(m.notes || '—')}</td><td>${m.parentAcknowledged ? '✓ Yes' : 'Pending'}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No PTA meetings recorded</td></tr>'}
+            </tbody>
+          </table>
 
-        <h2>G. Co-Curricular Achievements</h2>
-        <table>
-          <tr><th>Semester</th><th>Date</th><th>Achievement</th><th>Category</th></tr>
-          ${achievements.map(a => `<tr><td>Sem ${a.semester}</td><td>${DateFmt.format(a.date)}</td><td>${Str.escHtml(a.title)}</td><td>${Str.escHtml(a.category)}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No achievements recorded</td></tr>'}
-        </table>
+          <h2>G. Co-Curricular Achievements</h2>
+          <table>
+            <thead>
+              <tr><th>Semester</th><th>Date</th><th>Achievement</th><th>Category</th></tr>
+            </thead>
+            <tbody>
+              ${achievements.map(a => `<tr><td>Sem ${a.semester}</td><td>${DateFmt.format(a.date)}</td><td style="text-align:left">${Str.escHtml(a.title)}</td><td>${Str.escHtml(a.category)}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No achievements recorded</td></tr>'}
+            </tbody>
+          </table>
+        ` : ''}
 
         <div class="footer">
           Generated by MentorFile — ${Str.escHtml(collegeInfo.name)} · ${new Date().toLocaleString('en-IN')} · This is a digitally generated document.
@@ -470,7 +576,6 @@ const PDFGen = {
       </body>
       </html>`;
 
-    // Open in new window and print
     const win = window.open('', '_blank', 'width=900,height=800');
     win.document.write(html);
     win.document.close();
@@ -500,8 +605,8 @@ const StudentReport = {
     const student = DB.Users.getById(studentId);
     if (!student) return '<p>Student not found.</p>';
     const profile = DB.Profiles.get(studentId) || {};
-    const course = DB.Courses.getById(student.courseId);
-    const semCount = course ? course.semesterCount : 6;
+    const program = DB.Programs.getById(student.programId);
+    const semCount = program ? program.semesterCount : 6;
     const recs = DB.SemesterRecords.getAll(studentId);
     const ov = StudentReport.overview(studentId);
     const showConf = StudentReport.canSeeConfidential(viewerRole);
@@ -509,15 +614,15 @@ const StudentReport = {
     const meetings = (showConf ? DB.Meetings.getAll(studentId) : DB.Meetings.getPublic(studentId)).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const parent = DB.ParentLinks ? DB.ParentLinks.getParentForStudent(studentId) : null;
 
-    // Semester-wise + subject-wise
+    // Semester-wise + course-wise
     const semRows = Array.from({ length: semCount }, (_, i) => {
       const r = recs.find(rc => rc.semester === i + 1) || {};
-      const subjects = r.subjects || [];
-      const subjTable = subjects.length ? `
+      const courses = r.courses || [];
+      const subjTable = courses.length ? `
         <div style="padding:var(--space-3) var(--space-4);background:var(--bg-surface-2)">
           <table class="data-table" style="font-size:11px">
-            <thead><tr><th>Subject</th><th>Attendance %</th><th>Internal</th><th>External</th><th>Grade</th></tr></thead>
-            <tbody>${subjects.map(su => `<tr><td>${Str.escHtml(su.name || '—')}</td><td>${su.attendance ?? '—'}</td><td>${su.internal ?? '—'}</td><td>${su.external ?? '—'}</td><td>${su.grade || '—'}</td></tr>`).join('')}</tbody>
+            <thead><tr><th>Course</th><th>Attendance %</th><th>Internal</th><th>External</th><th>Grade</th></tr></thead>
+            <tbody>${courses.map(su => `<tr><td>${Str.escHtml(su.name || '—')}</td><td>${su.attendance ?? '—'}</td><td>${su.internal ?? '—'}</td><td>${su.external ?? '—'}</td><td>${su.grade || '—'}</td></tr>`).join('')}</tbody>
           </table>
         </div>` : '';
       return `<tr>
@@ -547,7 +652,7 @@ const StudentReport = {
         ${renderStatusBadge(DB.Analytics.getStudentStatus(studentId))}
       </div>
 
-      <h3 style="font-size:var(--font-size-sm);font-weight:700;margin:var(--space-4) 0 var(--space-2)">Semester Performance (Subject-wise)</h3>
+      <h3 style="font-size:var(--font-size-sm);font-weight:700;margin:var(--space-4) 0 var(--space-2)">Semester Performance (Course-wise)</h3>
       <div class="table-wrapper"><table class="data-table">
         <thead><tr><th>Sem</th><th>SGPA</th><th>Grade</th><th>Attendance</th><th>Remarks</th></tr></thead>
         <tbody>${semRows}</tbody>
@@ -576,7 +681,7 @@ const StudentReport = {
       size: 'lg',
       body: StudentReport.renderHTML(studentId, viewerRole),
       footer: `<button class="btn btn-secondary" onclick="Modal.close('student-report')">Close</button>
-               <button class="btn btn-primary" onclick="PDFGen.generate('${studentId}')">${Icons.download} Export PDF</button>`,
+               <button class="btn btn-primary" onclick="PDFGen.showExportModal('${studentId}')">${Icons.download} Export PDF</button>`,
     });
   },
 };
