@@ -573,10 +573,15 @@ const DB = (() => {
 
   async function bulkImportUsers(csvText, actorId) {
     const lines = csvText.trim().split('\n');
-    const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
+    const firstLine = lines[0] || '';
+    const commaCount = (firstLine.match(/,/g) || []).length;
+    const tabCount = (firstLine.match(/\t/g) || []).length;
+    const delimiter = (tabCount > commaCount) ? '\t' : ',';
+
+    const headers = lines[0].toLowerCase().split(delimiter).map(h => h.trim());
     const results = [];
     for (let i = 1; i < lines.length; i++) {
-      const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+      const vals = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
       const row = {};
       headers.forEach((h, idx) => row[h] = vals[idx] || '');
       if (!row.email || !row.name || !row.role) {

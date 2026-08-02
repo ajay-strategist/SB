@@ -1525,6 +1525,12 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
 
         // Parse CSV
         const parseCSVRows = (text) => {
+          // Detect delimiter: tab if tabs exist and outnumber commas in the first line
+          const firstLine = text.split(/\r?\n/)[0] || '';
+          const commaCount = (firstLine.match(/,/g) || []).length;
+          const tabCount = (firstLine.match(/\t/g) || []).length;
+          const delimiter = (tabCount > commaCount) ? '\t' : ',';
+
           const result = [];
           let row = [''];
           let inQuotes = false;
@@ -1538,7 +1544,7 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
               } else {
                 inQuotes = !inQuotes;
               }
-            } else if (char === ',' && !inQuotes) {
+            } else if (char === delimiter && !inQuotes) {
               row.push('');
             } else if ((char === '\r' || char === '\n') && !inQuotes) {
               if (char === '\r' && nextChar === '\n') i++;
