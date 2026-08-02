@@ -510,7 +510,7 @@
           ? `<span class="text-sm">${u.parentEmail ? Str.escHtml(u.parentEmail) : '<span class="text-muted">— not set —</span>'}</span>`
           : '<span class="text-muted">—</span>';
         return `<tr>
-          <td><div class="flex items-center gap-3">${renderAvatar(u.name,'sm')}<span class="font-semibold text-sm">${Str.escHtml(u.name)}</span></div></td>
+          <td><div class="flex items-center gap-3">${renderAvatar(u.name, 'sm', null, u.id)}<span class="font-semibold text-sm">${Str.escHtml(u.name)}</span></div></td>
           <td class="text-sm text-muted">${Str.escHtml(u.email)}</td>
           <td>${renderRoleBadge(u.role)}</td>
           <td class="text-sm">${Str.escHtml(dept?.name || '—')}</td>
