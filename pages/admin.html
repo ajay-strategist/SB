@@ -1425,6 +1425,18 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
       Modal.close('manage-courses');
       renderClassesAdmin(document.getElementById('page-content'));
     };
+    window.updateSyncMatchPlaceholder = function() {
+      const matchKey = document.getElementById('sp-match-key').value;
+      const colMatchInput = document.getElementById('sp-col-match');
+      if (matchKey === 'rollNo') {
+        colMatchInput.value = 'Register Number';
+      } else if (matchKey === 'phone') {
+        colMatchInput.value = 'Phone Number';
+      } else if (matchKey === 'email') {
+        colMatchInput.value = 'Email Address';
+      }
+    };
+
     window.showSyncPhotosModal = function() {
       Modal.create('sync-photos', {
         title: 'Sync Photos from Google Sheet (Google Form)',
@@ -1444,9 +1456,10 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
           <div class="form-grid">
             <div class="form-group">
               <label class="form-label required">Match Student by</label>
-              <select class="form-select" id="sp-match-key">
+              <select class="form-select" id="sp-match-key" onchange="updateSyncMatchPlaceholder()">
                 <option value="rollNo">Register/Roll Number</option>
                 <option value="phone">Phone Number</option>
+                <option value="email">Email Address</option>
               </select>
             </div>
             <div class="form-group">
@@ -1564,6 +1577,8 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
                      (cleanPPhone && cleanPPhone.endsWith(cleanVal)) ||
                      (cleanFPhone && cleanFPhone.endsWith(cleanVal)) ||
                      (cleanMPhone && cleanMPhone.endsWith(cleanVal));
+            } else if (matchKey === 'email') {
+              return (s.email || '').trim().toLowerCase() === matchValNormalized;
             }
             return false;
           });
