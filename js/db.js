@@ -589,10 +589,58 @@ const DB = (() => {
         continue;
       }
       const dept = findAll(KEYS.departments).find(d => d.name.toLowerCase() === (row.department || '').toLowerCase());
-      const program = findAll(KEYS.programs).find(p => p.name.toLowerCase() === (row.program || '').toLowerCase());
+      const program = findAll(KEYS.programs).find(p => p.name.toLowerCase() === (row.program || row.course || '').toLowerCase() || p.code.toLowerCase() === (row.program || row.course || '').toLowerCase());
 
       const registerNo = row.registerno || row['register number'] || row['register no'] || '';
       const rollNo = row.rollno || row['roll number'] || row['roll no'] || '';
+
+      let classId = null;
+      if (row.role === 'student') {
+        const classNameVal = (row.class || row['class name'] || row.classname || row['class number'] || row.classnumber || '').trim();
+        const academicYearVal = (row.academicyear || row['academic year'] || row['academic_year'] || row['admission year'] || row.admissionyear || row['start year'] || row.startyear || '').trim();
+
+        if (classNameVal) {
+          let foundClass = findAll(KEYS.classes).find(c => c.name.toLowerCase() === classNameVal.toLowerCase());
+          if (!foundClass) {
+            const programCodeMatch = classNameVal.match(/^([A-Za-z]+)/);
+            const startYearMatch = classNameVal.match(/(\d{4})/);
+
+            const classProg = program || (programCodeMatch ? findAll(KEYS.programs).find(p => p.code.toLowerCase() === programCodeMatch[1].toLowerCase() || p.name.toLowerCase() === programCodeMatch[1].toLowerCase()) : null);
+            const classStartYear = startYearMatch ? parseInt(startYearMatch[1]) : (parseInt(academicYearVal) || new Date().getFullYear());
+            const classDuration = classProg ? Math.ceil((classProg.semesterCount || 6) / 2) : 3;
+
+            if (classProg) {
+              foundClass = Classes.create({
+                programId: classProg.id,
+                startYear: classStartYear,
+                durationYears: classDuration,
+                batch: classNameVal.endsWith(' B') ? 'B' : (classNameVal.endsWith(' C') ? 'C' : 'A'),
+                currentYear: Math.max(1, new Date().getFullYear() - classStartYear + 1)
+              }, actorId);
+            }
+          }
+          if (foundClass) {
+            classId = foundClass.id;
+          }
+        } else if (program && academicYearVal) {
+          const startYear = parseInt(academicYearVal);
+          const duration = Math.ceil((program.semesterCount || 6) / 2);
+          const expectedName = Classes.buildName(program.code, startYear, duration, row.batch || 'A');
+          let foundClass = findAll(KEYS.classes).find(c => c.name.toLowerCase() === expectedName.toLowerCase());
+          if (!foundClass) {
+            foundClass = Classes.create({
+              programId: program.id,
+              startYear: startYear,
+              durationYears: duration,
+              batch: row.batch || 'A',
+              currentYear: Math.max(1, new Date().getFullYear() - startYear + 1)
+            }, actorId);
+          }
+          if (foundClass) {
+            classId = foundClass.id;
+          }
+        }
+      }
 
       const res = await createUser({
         email: row.email,
@@ -600,6 +648,7 @@ const DB = (() => {
         role: row.role,
         departmentId: dept?.id,
         programId: program?.id,
+        classId,
         phone: row.phone || row['phone number'] || '',
         registerNo,
         rollNo,

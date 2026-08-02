@@ -874,9 +874,9 @@
             <div class="section-card-header"><div class="section-card-title">${Icons.upload} Upload CSV</div></div>
             <div class="section-card-body">
               <div class="alert alert-info mb-4">${Icons.info}
-                <div><strong>CSV Format:</strong> The file must have these columns in order:<br>
-                <code style="font-size:11px;background:var(--bg-surface-2);padding:2px 6px;border-radius:4px">name, email, role, department, course, phone, registerno, rollno, parentemail</code><br>
-                <span style="font-size:11px;color:var(--text-secondary)">role must be: principal, hod, mentor, student, or parent</span></div>
+                <div><strong>CSV Format:</strong> The file can contain the following columns:<br>
+                <code style="font-size:11px;background:var(--bg-surface-2);padding:2px 6px;border-radius:4px">name, email, role, department, course, phone, registerno, rollno, parentemail, class, academic_year</code><br>
+                <span style="font-size:11px;color:var(--text-secondary)">role: student, mentor, hod, parent, principal. Optional: class (e.g. MCom-2026-2028), academic_year (e.g. 2026).</span></div>
               </div>
               <div class="upload-zone" id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click()">
                 ${Icons.upload}
@@ -920,11 +920,16 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
         const text = e.target.result;
         window._pendingCSVText = text;
         const lines = text.trim().split('\n');
+        const firstLine = lines[0] || '';
+        const commaCount = (firstLine.match(/,/g) || []).length;
+        const tabCount = (firstLine.match(/\t/g) || []).length;
+        const delimiter = (tabCount > commaCount) ? '\t' : ',';
+
         document.getElementById('import-preview').innerHTML = `
           <div class="alert alert-info">${Icons.info} ${lines.length - 1} user(s) found in file. Review below and confirm import.</div>
           <div class="import-preview-table table-wrapper" style="max-height:200px">
-            <table class="data-table"><thead><tr><th>#</th>${lines[0].split(',').map(h => `<th>${h.trim()}</th>`).join('')}</tr></thead>
-            <tbody>${lines.slice(1).map((l, i) => `<tr><td>${i+1}</td>${l.split(',').map(v => `<td class="text-xs">${v.trim()}</td>`).join('')}</tr>`).join('')}</tbody></table>
+            <table class="data-table"><thead><tr><th>#</th>${lines[0].split(delimiter).map(h => `<th>${h.trim()}</th>`).join('')}</tr></thead>
+            <tbody>${lines.slice(1).map((l, i) => `<tr><td>${i+1}</td>${l.split(delimiter).map(v => `<td class="text-xs">${v.trim()}</td>`).join('')}</tr>`).join('')}</tbody></table>
           </div>
           <button class="btn btn-primary mt-4" onclick="doImport(this)">
             ${Icons.upload} Import ${lines.length - 1} Users
