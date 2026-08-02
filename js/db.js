@@ -642,6 +642,32 @@ const DB = (() => {
         }
       }
 
+      // Check if user already exists (cross check mail ID)
+      const existingUser = findAll(KEYS.users).find(u => u.email.toLowerCase() === row.email.toLowerCase());
+      if (existingUser) {
+        // Move that person to the new class and update other details
+        const updatedUser = update(KEYS.users, existingUser.id, {
+          name: row.name || existingUser.name,
+          classId: classId || existingUser.classId,
+          programId: program?.id || existingUser.programId,
+          departmentId: dept?.id || existingUser.departmentId,
+          phone: row.phone || row['phone number'] || existingUser.phone || null,
+          parentEmail: row.parentemail || row['parent email'] || existingUser.parentEmail || null
+        }, actorId);
+
+        if (existingUser.role === 'student') {
+          const existingProfile = Profiles.get(existingUser.id) || {};
+          Profiles.save(existingUser.id, {
+            ...existingProfile,
+            registerNo: registerNo || existingProfile.registerNo || '',
+            rollNo: rollNo || existingProfile.rollNo || ''
+          }, actorId);
+        }
+
+        results.push({ row: i, email: row.email, ok: true, user: updatedUser, note: 'Moved to new class / updated' });
+        continue;
+      }
+
       const res = await createUser({
         email: row.email,
         name: row.name,
