@@ -1505,8 +1505,11 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
           const sheetIdMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
           if (sheetIdMatch) {
             const sheetId = sheetIdMatch[1];
+            const gidMatch = url.match(/[#&?]gid=([0-9]+)/);
+            const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : '';
             if (!url.includes('/pub') && !url.includes('/export')) {
-              fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv`;
+              // Using export endpoint is more reliable as it works with "anyone with the link can view" sharing settings
+              fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`;
             }
           }
 
@@ -1514,11 +1517,18 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
           try {
             resp = await fetch(fetchUrl);
           } catch (e) {
-            throw new Error('Failed to fetch the URL (Network/CORS error). Please make sure the sheet is published to the web as CSV, or use the copy-paste CSV data option below instead.');
+            // If direct fetch fails (usually CORS), try to fallback to a public CORS proxy
+            try {
+              resultsArea.innerHTML = `<div class="alert alert-info">Direct fetch blocked by CORS. Retrying via CORS proxy…</div>`;
+              const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fetchUrl)}`;
+              resp = await fetch(proxyUrl);
+            } catch (proxyErr) {
+              throw new Error('Failed to fetch the URL (Network/CORS error). Please make sure the sheet is shared as "Anyone with the link can view", or use the copy-paste CSV data option below instead.');
+            }
           }
 
-          if (!resp.ok) {
-            throw new Error(`Failed to fetch URL. Status: ${resp.status}. Make sure the sheet is public/published.`);
+          if (!resp || !resp.ok) {
+            throw new Error(`Failed to fetch URL. Status: ${resp ? resp.status : 'Unknown'}. Make sure the sheet is shared as "Anyone with the link can view" or published to the web.`);
           }
           csvText = await resp.text();
         }
