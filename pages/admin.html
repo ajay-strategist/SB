@@ -1500,8 +1500,26 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
       try {
         if (url && !csvText) {
           resultsArea.innerHTML = `<div class="alert alert-info">Fetching Google Sheet data…</div>`;
-          const resp = await fetch(url);
-          if (!resp.ok) throw new Error('Failed to fetch the URL. Please make sure the sheet is public and published as CSV.');
+          
+          let fetchUrl = url;
+          const sheetIdMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+          if (sheetIdMatch) {
+            const sheetId = sheetIdMatch[1];
+            if (!url.includes('/pub') && !url.includes('/export')) {
+              fetchUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/pub?output=csv`;
+            }
+          }
+
+          let resp;
+          try {
+            resp = await fetch(fetchUrl);
+          } catch (e) {
+            throw new Error('Failed to fetch the URL (Network/CORS error). Please make sure the sheet is published to the web as CSV, or use the copy-paste CSV data option below instead.');
+          }
+
+          if (!resp.ok) {
+            throw new Error(`Failed to fetch URL. Status: ${resp.status}. Make sure the sheet is public/published.`);
+          }
           csvText = await resp.text();
         }
 
