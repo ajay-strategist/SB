@@ -1517,13 +1517,27 @@ Susan Thomas,susan.t@gmail.com,student,Arts & Humanities,MA English Literature,9
           try {
             resp = await fetch(fetchUrl);
           } catch (e) {
-            // If direct fetch fails (usually CORS), try to fallback to a public CORS proxy
+            // Direct fetch failed, try CORS proxies in sequence
             try {
-              resultsArea.innerHTML = `<div class="alert alert-info">Direct fetch blocked by CORS. Retrying via CORS proxy…</div>`;
-              const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fetchUrl)}`;
+              resultsArea.innerHTML = `<div class="alert alert-info">Direct fetch blocked by CORS. Retrying via CORS Proxy 1…</div>`;
+              const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(fetchUrl)}`;
               resp = await fetch(proxyUrl);
-            } catch (proxyErr) {
-              throw new Error('Failed to fetch the URL (Network/CORS error). Please make sure the sheet is shared as "Anyone with the link can view", or use the copy-paste CSV data option below instead.');
+              if (!resp.ok) throw new Error('Proxy 1 returned non-OK status');
+            } catch (proxyErr1) {
+              try {
+                resultsArea.innerHTML = `<div class="alert alert-info">CORS Proxy 1 failed. Retrying via CORS Proxy 2…</div>`;
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(fetchUrl)}`;
+                resp = await fetch(proxyUrl);
+                if (!resp.ok) throw new Error('Proxy 2 returned non-OK status');
+              } catch (proxyErr2) {
+                try {
+                  resultsArea.innerHTML = `<div class="alert alert-info">CORS Proxy 2 failed. Retrying via CORS Proxy 3…</div>`;
+                  const proxyUrl = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(fetchUrl)}`;
+                  resp = await fetch(proxyUrl);
+                } catch (proxyErr3) {
+                  throw new Error('Failed to fetch the URL (Network/CORS error). Please make sure the sheet is shared as "Anyone with the link can view", or use the copy-paste CSV data option below instead.');
+                }
+              }
             }
           }
 
