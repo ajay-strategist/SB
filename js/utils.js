@@ -329,6 +329,30 @@ function exportCSV(rows, filename = 'export.csv') {
   a.click();
 }
 
+// Load an image (in the main window, which has a real origin) and convert it to
+// a data URL via canvas. Returns '' if it can't be loaded/converted (e.g. no CORS).
+function imageToDataURL(url) {
+  return new Promise(resolve => {
+    if (!url) return resolve('');
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth || 400;
+        c.height = img.naturalHeight || 480;
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        finish(c.toDataURL('image/jpeg', 0.85));
+      } catch (e) { finish(''); }
+    };
+    img.onerror = () => finish('');
+    img.src = url;
+    setTimeout(() => finish(''), 5000); // don't hang the export
+  });
+}
+
 // ── PDF Generation ────────────────────────────────────────────
 const PDFGen = {
   showExportModal: (studentId) => {
@@ -411,18 +435,20 @@ const PDFGen = {
     if (!student) { Toast.error('Student not found'); return; }
 
     const profile = DB.Profiles.get(studentId) || {};
-    let photoUrl = profile.avatarUrl || '';
-    if (photoUrl) {
-      if (photoUrl.includes('lh3.googleusercontent.com/d/')) {
-        const parts = photoUrl.split('/');
-        const fileId = parts[parts.length - 1];
-        photoUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
-      } else if (photoUrl.includes('drive.google.com/file/d/')) {
-        const regMatch = photoUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-        if (regMatch && regMatch[1]) {
-          photoUrl = `https://drive.google.com/thumbnail?id=${regMatch[1]}&sz=w500`;
-        }
-      }
+    // Resolve the student photo and EMBED it as a data URL so it prints reliably
+    // (external URLs — esp. Google Drive — often fail to load in the print window).
+    const rawPhoto = profile.avatarUrl || profile.photo || '';
+    let fileId = '';
+    if (rawPhoto.includes('lh3.googleusercontent.com/d/')) fileId = rawPhoto.split('/d/')[1].split(/[=/?]/)[0];
+    else if (rawPhoto.includes('drive.google.com/file/d/')) { const m = rawPhoto.match(/\/file\/d\/([a-zA-Z0-9_-]+)/); fileId = m ? m[1] : ''; }
+    else { const m = rawPhoto.match(/[?&]id=([a-zA-Z0-9_-]+)/); if (m) fileId = m[1]; }
+    // Prefer Google's image CDN (better CORS + loads reliably in an <img>)
+    let candidateSrc = rawPhoto;
+    if (fileId) candidateSrc = `https://lh3.googleusercontent.com/d/${fileId}=w400`;
+    let photoUrl = '';
+    if (candidateSrc) {
+      if (candidateSrc.startsWith('data:')) photoUrl = candidateSrc;               // already embedded
+      else photoUrl = (await imageToDataURL(candidateSrc)) || candidateSrc;         // embed, else best-effort URL
     }
     const program = DB.Programs.getById(student.programId);
     const dept = DB.Departments.getById(student.departmentId);
