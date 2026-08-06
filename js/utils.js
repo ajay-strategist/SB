@@ -207,18 +207,39 @@ const Theme = {
 };
 
 // ── Avatar Render ─────────────────────────────────────────────
-// Turn a stored photo value (Google Drive link, data URL, etc.) into a URL that
-// actually displays. Prefers the same-origin proxy when the app is hosted.
-function resolvePhotoUrl(raw) {
+// Extract a Google Drive file id from any of the common link formats.
+function driveFileId(raw) {
   if (!raw) return '';
-  if (raw.startsWith('data:')) return raw;
-  let fileId = '';
-  if (raw.includes('lh3.googleusercontent.com/d/')) fileId = raw.split('/d/')[1].split(/[=/?]/)[0];
-  else if (raw.includes('drive.google.com/file/d/')) { const m = raw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/); fileId = m ? m[1] : ''; }
-  else { const m = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/); if (m) fileId = m[1]; }
-  if (!fileId) return raw;
+  if (raw.includes('lh3.googleusercontent.com/d/')) return raw.split('/d/')[1].split(/[=/?]/)[0];
+  const m1 = raw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/); if (m1) return m1[1];
+  const m2 = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/); if (m2) return m2[1];
+  return '';
+}
+// Ordered list of URLs to try for a photo. Different files serve from different
+// Google endpoints, so we try several and fall back through them on error.
+function photoSources(raw) {
+  if (!raw) return [];
+  if (raw.startsWith('data:')) return [raw];
+  const id = driveFileId(raw);
+  if (!id) return [raw];
   const origin = (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) ? window.location.origin : '';
-  return origin ? `${origin}/api/photo?id=${fileId}` : `https://lh3.googleusercontent.com/d/${fileId}=w400`;
+  const list = [];
+  if (origin) list.push(`${origin}/api/photo?id=${id}`);              // same-origin proxy (once deployed)
+  list.push(`https://lh3.googleusercontent.com/d/${id}=w400`);        // Google image CDN
+  list.push(`https://drive.google.com/thumbnail?id=${id}&sz=w400`);   // Drive thumbnail
+  return list;
+}
+// On <img> error, advance to the next source; when exhausted, show initials.
+function photoNext(img) {
+  try {
+    const sources = JSON.parse(img.getAttribute('data-src') || '[]');
+    const step = (parseInt(img.getAttribute('data-step')) || 0) + 1;
+    if (step < sources.length) { img.setAttribute('data-step', String(step)); img.src = sources[step]; return; }
+    const d = document.createElement('div');
+    d.className = 'avatar-placeholder avatar-' + (img.getAttribute('data-size') || 'md');
+    d.textContent = img.getAttribute('data-ini') || '?';
+    img.replaceWith(d);
+  } catch (e) { /* ignore */ }
 }
 
 function renderAvatar(name, size = 'md', photoUrl = null, studentId = null) {
@@ -232,8 +253,12 @@ function renderAvatar(name, size = 'md', photoUrl = null, studentId = null) {
     const profile = DB.Profiles.get(session.userId);
     if (profile && profile.avatarUrl) url = profile.avatarUrl;
   }
-  url = resolvePhotoUrl(url);
-  if (url) return `<img src="${url}" class="avatar avatar-${size}" alt="${Str.escHtml(name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'avatar-placeholder avatar-${size}',textContent:'${Str.initials(name)}'}))"${style}>`;
+  const sources = photoSources(url);
+  if (sources.length) {
+    const ini = Str.initials(name);
+    const data = JSON.stringify(sources).replace(/'/g, '&#39;');
+    return `<img src="${sources[0]}" data-src='${data}' data-step="0" data-size="${size}" data-ini="${ini}" class="avatar avatar-${size}" alt="${Str.escHtml(name)}" onerror="photoNext(this)"${style}>`;
+  }
   return `<div class="avatar-placeholder avatar-${size}"${style}>${Str.initials(name)}</div>`;
 }
 
