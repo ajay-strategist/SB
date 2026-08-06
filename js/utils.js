@@ -133,6 +133,15 @@ const Str = {
   capitalize: s => s ? s.charAt(0).toUpperCase() + s.slice(1) : '',
   truncate: (s = '', len = 60) => s.length > len ? s.slice(0, len) + '…' : s,
   escHtml: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'),
+  convertDriveLink: (url) => {
+    if (!url) return '';
+    url = url.trim();
+    const regMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+    if (regMatch && regMatch[1]) {
+      return `https://lh3.googleusercontent.com/d/${regMatch[1]}`;
+    }
+    return url;
+  },
 };
 
 // ── Icon Helper ──────────────────────────────────────────────

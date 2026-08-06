@@ -536,7 +536,8 @@ const DB = (() => {
         Profiles.save(res.userId, {
           registerNo: data.registerNo || '',
           phone: data.phone || '',
-          rollNo: data.rollNo || ''
+          rollNo: data.rollNo || '',
+          avatarUrl: data.avatarUrl || ''
         }, actorId);
       }
 
@@ -563,7 +564,8 @@ const DB = (() => {
         Profiles.save(user.id, {
           registerNo: data.registerNo || '',
           phone: data.phone || '',
-          rollNo: data.rollNo || ''
+          rollNo: data.rollNo || '',
+          avatarUrl: data.avatarUrl || ''
         }, actorId);
       }
 
@@ -571,7 +573,11 @@ const DB = (() => {
     }
   }
 
-  async function bulkImportUsers(csvText, actorId) {
+  async function bulkImportUsers(csvText, actorId, defaultClassId = null) {
+    const defaultClass = defaultClassId ? findAll(KEYS.classes).find(c => c.id === defaultClassId) : null;
+    const defaultProgram = defaultClass ? findAll(KEYS.programs).find(p => p.id === defaultClass.programId) : null;
+    const defaultDept = defaultProgram ? findAll(KEYS.departments).find(d => d.id === defaultProgram.departmentId) : null;
+
     const lines = csvText.trim().split('\n');
     const firstLine = lines[0] || '';
     const commaCount = (firstLine.match(/,/g) || []).length;
@@ -579,23 +585,34 @@ const DB = (() => {
     const delimiter = (tabCount > commaCount) ? '\t' : ',';
 
     const headers = lines[0].toLowerCase().split(delimiter).map(h => h.trim());
+    
+    // Find photo column
+    const photoCol = headers.find(h => ['photo', 'avatar', 'picture', 'image', 'photourl', 'avatarurl', 'photo link', 'avatar link', 'photo_url', 'avatar_url'].includes(h));
+
     const results = [];
     for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
       const vals = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
       const row = {};
       headers.forEach((h, idx) => row[h] = vals[idx] || '');
-      if (!row.email || !row.name || !row.role) {
+      
+      const roleVal = (defaultClassId ? 'student' : (row.role || '')).toLowerCase().trim();
+      
+      if (!row.email || !row.name || !roleVal) {
         results.push({ row: i, ok: false, error: 'Missing email, name, or role' });
         continue;
       }
-      const dept = findAll(KEYS.departments).find(d => d.name.toLowerCase() === (row.department || '').toLowerCase());
-      const program = findAll(KEYS.programs).find(p => p.name.toLowerCase() === (row.program || row.course || '').toLowerCase() || p.code.toLowerCase() === (row.program || row.course || '').toLowerCase());
+      const dept = defaultClass ? defaultDept : findAll(KEYS.departments).find(d => d.name.toLowerCase() === (row.department || '').toLowerCase());
+      const program = defaultClass ? defaultProgram : findAll(KEYS.programs).find(p => p.name.toLowerCase() === (row.program || row.course || '').toLowerCase() || p.code.toLowerCase() === (row.program || row.course || '').toLowerCase());
 
       const registerNo = row.registerno || row['register number'] || row['register no'] || '';
       const rollNo = row.rollno || row['roll number'] || row['roll no'] || '';
+      
+      const rawPhotoUrl = photoCol ? row[photoCol] : '';
+      const convertedPhotoUrl = rawPhotoUrl ? Str.convertDriveLink(rawPhotoUrl) : '';
 
-      let classId = null;
-      if (row.role === 'student') {
+      let classId = defaultClassId;
+      if (!classId && roleVal === 'student') {
         const classNameVal = (row.class || row['class name'] || row.classname || row['class number'] || row.classnumber || '').trim();
         const academicYearVal = (row.academicyear || row['academic year'] || row['academic_year'] || row['admission year'] || row.admissionyear || row['start year'] || row.startyear || '').trim();
 
@@ -655,12 +672,13 @@ const DB = (() => {
           parentEmail: row.parentemail || row['parent email'] || existingUser.parentEmail || null
         }, actorId);
 
-        if (existingUser.role === 'student') {
+        if (existingUser.role === 'student' || roleVal === 'student') {
           const existingProfile = Profiles.get(existingUser.id) || {};
           Profiles.save(existingUser.id, {
             ...existingProfile,
             registerNo: registerNo || existingProfile.registerNo || '',
-            rollNo: rollNo || existingProfile.rollNo || ''
+            rollNo: rollNo || existingProfile.rollNo || '',
+            avatarUrl: convertedPhotoUrl || existingProfile.avatarUrl || ''
           }, actorId);
         }
 
@@ -671,14 +689,15 @@ const DB = (() => {
       const res = await createUser({
         email: row.email,
         name: row.name,
-        role: row.role,
-        departmentId: dept?.id,
-        programId: program?.id,
+        role: roleVal,
+        departmentId: dept?.id || null,
+        programId: program?.id || null,
         classId,
         phone: row.phone || row['phone number'] || '',
         registerNo,
         rollNo,
-        parentEmail: row.parentemail || row['parent email']
+        parentEmail: row.parentemail || row['parent email'] || '',
+        avatarUrl: convertedPhotoUrl
       }, actorId);
       results.push({ row: i, email: row.email, ...res });
     }

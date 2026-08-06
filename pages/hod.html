@@ -69,6 +69,7 @@
     let activeTab = 'dashboard';
     let selectedStudentId = null;
     let selectedClassId = null;
+    let activeClassTab = 'students';
 
     window.addEventListener('DOMContentLoaded', async () => {
       await DB.init();
@@ -321,6 +322,98 @@
         document.getElementById('breadcrumb-current').textContent = `Class: ${cls?.name || ''}`;
         const container = document.getElementById('page-content');
         
+        const program = DB.Programs.getById(cls?.programId);
+        const sems = program?.semesterCount || 6;
+        const classCourses = cls?.semesterCourses || {};
+        const programCourses = program?.defaultCourses || {};
+        
+        if (!tempCourses || tempCourses._classId !== classId) {
+          tempCourses = { _classId: classId };
+          for (let s = 1; s <= sems; s++) {
+            tempCourses[s] = classCourses[s] || programCourses[s] || [];
+          }
+          window._mcActiveSem = "1";
+        }
+        
+        const isStudents = activeClassTab === 'students';
+        let tabContent = '';
+        
+        if (isStudents) {
+          tabContent = `
+            <!-- Search bar & actions -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);flex-wrap:wrap;gap:var(--space-3)">
+              <div class="search-input-wrapper" style="width:300px;position:relative">
+                <span class="search-icon" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);height:16px;width:16px;color:var(--text-tertiary);display:flex;align-items:center">${Icons.search}</span>
+                <input type="text" class="form-input" id="class-student-search" placeholder="Search students..." oninput="filterClassStudents()" style="padding-left:36px;width:100%">
+              </div>
+              <div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="showImportClassStudentsModal('${classId}')">
+                  ${Icons.upload} Import CSV
+                </button>
+                <button class="btn btn-primary btn-sm hover-lift press-scale" onclick="showAddStudentsModal('${classId}')">
+                  ${Icons.plus} Add Students
+                </button>
+              </div>
+            </div>
+
+            <!-- Bulk Actions Toolbar -->
+            <div id="bulk-actions-toolbar" class="bulk-toolbar" style="display:none;margin-bottom:var(--space-4);background:var(--bg-surface-2);padding:var(--space-3) var(--space-4);border-radius:var(--border-radius-md);border-left:4px solid var(--brand-primary);align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
+              <div class="text-sm font-semibold"><span id="selected-count">0</span> students selected</div>
+              <div class="flex gap-2">
+                <button class="btn btn-secondary btn-sm" onclick="bulkMoveClass()">${Icons.grid} Move Class</button>
+                <button class="btn btn-secondary btn-sm" onclick="bulkAssignMentor()">${Icons.user} Assign Mentor</button>
+                <button class="btn btn-secondary btn-sm text-warning" onclick="bulkRemoveFromClass()">${Icons.x} Remove from Class</button>
+                <button class="btn btn-danger btn-sm" onclick="bulkDeleteStudents()">${Icons.trash} Delete</button>
+              </div>
+            </div>
+            
+            <div class="section-card">
+              <div class="table-wrapper">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th style="width:40px"><input type="checkbox" id="select-all-class" onclick="toggleSelectAllClass(this.checked)"></th>
+                      <th>Student</th>
+                      <th>Roll / Reg No</th>
+                      <th>Phone</th>
+                      <th>Attendance (Current Sem)</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${students.map(s => rowForClassStudent(s)).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>`}
+                  </tbody>
+                </table>
+              </div>
+            </div>`;
+        } else {
+          tabContent = `
+            <div class="section-card">
+              <div class="section-card-header"><div class="section-card-title">${Icons.book} Class Course List</div></div>
+              <div class="section-card-body">
+                <div class="form-grid" style="grid-template-columns: 200px 1fr; gap: var(--space-5);">
+                  <div>
+                    <label class="form-label font-semibold">Select Semester</label>
+                    <div class="flex flex-col gap-1" id="class-courses-sem-tabs" style="display:flex;flex-direction:column;gap:6px">
+                      ${Array.from({ length: sems }, (_, idx) => {
+                        const semNum = idx + 1;
+                        const isSemActive = window._mcActiveSem === String(semNum);
+                        return `<button class="btn btn-block btn-sm ${isSemActive ? 'btn-primary' : 'btn-secondary'}" onclick="switchCourseSem('${classId}', ${semNum})" style="justify-content: flex-start; text-align: left; width: 100%;">${isSemActive ? '● ' : ''}Semester ${semNum}</button>`;
+                      }).join('')}
+                    </div>
+                  </div>
+                  <div>
+                    <label class="form-label font-semibold" style="display:block;margin-bottom:var(--space-2)">Courses for Semester <span id="active-sem-num">${window._mcActiveSem}</span> (one per line)</label>
+                    <textarea class="form-textarea" id="class-courses-textarea" rows="8" placeholder="e.g.&#10;Mathematics I&#10;Programming in C" style="width: 100%; font-family: inherit; font-size: inherit; padding: var(--space-3); border: 1px solid var(--border-color); border-radius: var(--border-radius-md); background: var(--bg-surface-1); color: var(--text-primary);" oninput="updateTempCourses('${classId}')">${(tempCourses[window._mcActiveSem] || []).join('\n')}</textarea>
+                    <div class="form-hint" style="margin-top: var(--space-2)">Enter each course name on a new line. Click Save below to apply.</div>
+                    <button class="btn btn-primary mt-4 hover-lift press-scale" onclick="saveClassCoursesDirect('${classId}')">${Icons.check} Save Courses</button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+        }
+
         container.innerHTML = `
           <button class="btn btn-secondary btn-sm back-btn" onclick="navigate('classes')">${Icons.chevronLeft} Back to Classes</button>
           
@@ -330,55 +423,22 @@
                 <h1 class="page-title">${cls?.name || 'Class'}</h1>
                 <p class="page-subtitle">${students.length} students · Year ${cls?.currentYear} / ${cls?.durationYears}</p>
               </div>
-              <div class="flex gap-2">
-                <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="manageClassCoursesModal('${classId}')">
-                  ${Icons.book} Manage Courses
-                </button>
-                <button class="btn btn-primary btn-sm hover-lift press-scale" onclick="showAddStudentsModal('${classId}')">
-                  ${Icons.plus} Add Students
-                </button>
-              </div>
             </div>
           </div>
 
-          <!-- Bulk Actions Toolbar -->
-          <div id="bulk-actions-toolbar" class="bulk-toolbar" style="display:none;margin-bottom:var(--space-4);background:var(--bg-surface-2);padding:var(--space-3) var(--space-4);border-radius:var(--border-radius-md);border-left:4px solid var(--brand-primary);align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
-            <div class="text-sm font-semibold"><span id="selected-count">0</span> students selected</div>
-            <div class="flex gap-2">
-              <button class="btn btn-secondary btn-sm" onclick="bulkMoveClass()">${Icons.grid} Move Class</button>
-              <button class="btn btn-secondary btn-sm" onclick="bulkAssignMentor()">${Icons.user} Assign Mentor</button>
-              <button class="btn btn-secondary btn-sm text-warning" onclick="bulkRemoveFromClass()">${Icons.x} Remove from Class</button>
-              <button class="btn btn-danger btn-sm" onclick="bulkDeleteStudents()">${Icons.trash} Delete</button>
-            </div>
+          <div class="tabs" style="margin-bottom:var(--space-4)">
+            <button class="tab-btn ${activeClassTab === 'students' ? 'active' : ''}" onclick="switchClassTab('${classId}', 'students')">Students Name</button>
+            <button class="tab-btn ${activeClassTab === 'courses' ? 'active' : ''}" onclick="switchClassTab('${classId}', 'courses')">Courses</button>
           </div>
           
-          <div class="section-card">
-            <div class="table-wrapper">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th style="width:40px"><input type="checkbox" id="select-all-class" onclick="toggleSelectAllClass(this.checked)"></th>
-                    <th>Student</th>
-                    <th>Roll / Reg No</th>
-                    <th>Phone</th>
-                    <th>Attendance (Current Sem)</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${students.map(s => rowForClassStudent(s)).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>`}
-                </tbody>
-              </table>
-            </div>
-          </div>`;
+          ${tabContent}`;
       };
       Motion.transition(document.getElementById('page-content'), render);
     }
 
     function rowForClassStudent(s) {
       const profile = DB.Profiles.get(s.id) || {};
-      return `<tr>
+      return `<tr class="class-student-row" data-name="${s.name.toLowerCase()}" data-email="${s.email.toLowerCase()}">
         <td><input type="checkbox" class="student-select-cb" data-id="${s.id}" onchange="updateBulkToolbar()"></td>
         <td><div class="flex items-center gap-3">${renderAvatar(s.name,'sm',null,s.id)}<span class="font-semibold text-sm" style="view-transition-name:name-${s.id};width:fit-content">${Str.escHtml(s.name)}</span></div></td>
         <td class="text-sm">
@@ -460,15 +520,58 @@
       const ids = getSelectedStudentIds();
       if (!ids.length) return;
       const faculty = DB.Users.getAll().filter(u => (u.role === 'mentor' || u.role === 'hod') && (isPrincipal || u.departmentId === session.departmentId));
+      
+      // Register toggle helper on window
+      window.toggleAssignMode = function(mode) {
+        const manualGroup = document.getElementById('assign-manual-group');
+        const randomGroup = document.getElementById('assign-random-group');
+        if (manualGroup && randomGroup) {
+          if (mode === 'manual') {
+            manualGroup.style.display = 'block';
+            randomGroup.style.display = 'none';
+          } else {
+            manualGroup.style.display = 'none';
+            randomGroup.style.display = 'block';
+          }
+        }
+      };
+
       Modal.create('bulk-assign', {
         title: `Assign Mentor to ${ids.length} Students`, size: 'sm',
         body: `
-          <div class="form-group">
+          <div class="form-group" style="margin-bottom:var(--space-4)">
+            <label class="form-label font-semibold" style="display:block;margin-bottom:var(--space-2)">Assignment Mode</label>
+            <div style="display:flex;gap:var(--space-4)">
+              <label class="flex items-center gap-2" style="cursor:pointer">
+                <input type="radio" name="assign-mode" value="manual" checked onchange="toggleAssignMode('manual')">
+                <span>Manually</span>
+              </label>
+              <label class="flex items-center gap-2" style="cursor:pointer">
+                <input type="radio" name="assign-mode" value="random" onchange="toggleAssignMode('random')">
+                <span>Randomly / Distribute</span>
+              </label>
+            </div>
+          </div>
+
+          <div id="assign-manual-group" class="form-group">
             <label class="form-label required">Select Mentor</label>
             <select class="form-select" id="ba-mentor">
               <option value="">— Select Mentor —</option>
               ${faculty.map(f => `<option value="${f.id}">${f.name} (${roleLabel(f.role)})</option>`).join('')}
             </select>
+          </div>
+
+          <div id="assign-random-group" class="form-group" style="display:none">
+            <label class="form-label required" style="display:block;margin-bottom:var(--space-2)">Select Mentors to Distribute Among</label>
+            <div style="max-height:160px;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--border-radius-md);padding:var(--space-2);background:var(--bg-surface-1)">
+              ${faculty.map(f => `
+                <label class="flex items-center gap-2" style="padding:4px 0;cursor:pointer">
+                  <input type="checkbox" class="ba-mentor-checkbox" value="${f.id}">
+                  <span>${f.name} (${roleLabel(f.role)})</span>
+                </label>
+              `).join('')}
+            </div>
+            <div class="text-xs text-muted mt-2">Selected students will be evenly distributed among these mentors.</div>
           </div>`,
         footer: `<button class="btn btn-secondary" onclick="Modal.close('bulk-assign')">Cancel</button>
                  <button class="btn btn-primary" onclick="doBulkAssignMentor()">Assign</button>`,
@@ -476,14 +579,30 @@
     }
 
     function doBulkAssignMentor() {
-      const mentorId = document.getElementById('ba-mentor').value;
-      if (!mentorId) { Toast.error('Select a mentor'); return; }
+      const mode = document.querySelector('input[name="assign-mode"]:checked')?.value || 'manual';
       const ids = getSelectedStudentIds();
-      const mentor = DB.Users.getById(mentorId);
-      ids.forEach(id => {
-        DB.Assignments.assign(mentorId, id, session.userId);
-      });
-      Toast.success('Assigned', `${ids.length} students assigned to ${mentor.name}.`);
+      if (!ids.length) return;
+      
+      if (mode === 'manual') {
+        const mentorId = document.getElementById('ba-mentor').value;
+        if (!mentorId) { Toast.error('Select a mentor'); return; }
+        const mentor = DB.Users.getById(mentorId);
+        ids.forEach(id => {
+          DB.Assignments.assign(mentorId, id, session.userId);
+        });
+        Toast.success('Assigned', `${ids.length} students assigned to ${mentor.name}.`);
+      } else {
+        const checkedMentors = [...document.querySelectorAll('.ba-mentor-checkbox:checked')].map(cb => cb.value);
+        if (!checkedMentors.length) { Toast.error('Select at least one mentor for distribution.'); return; }
+        
+        // Shuffle students array to randomize assignment
+        const shuffledIds = [...ids].sort(() => Math.random() - 0.5);
+        shuffledIds.forEach((studentId, index) => {
+          const mentorId = checkedMentors[index % checkedMentors.length];
+          DB.Assignments.assign(mentorId, studentId, session.userId);
+        });
+        Toast.success('Assigned', `${ids.length} students randomly distributed among ${checkedMentors.length} mentors.`);
+      }
       Modal.close('bulk-assign');
       openClass(selectedClassId);
     }
@@ -681,6 +800,7 @@
           <div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="es-name" value="${s.name}"></div>
           <div class="form-group"><label class="form-label">Register Number</label><input class="form-input" id="es-regno" value="${p.registerNo || ''}" placeholder="e.g. REG/CS/2024/09"></div>
           <div class="form-group"><label class="form-label">Phone Number</label><input class="form-input" id="es-phone" value="${s.phone || p.phone || ''}" placeholder="9876543210"></div>
+          <div class="form-group"><label class="form-label">Photo URL (Google Drive / Image Link)</label><input class="form-input" id="es-photo" value="${p.avatarUrl || ''}" placeholder="Paste Google Drive link or web URL"></div>
           <div class="form-group"><label class="form-label">Gender</label>
             <select class="form-select" id="es-gender">
               ${['','Male','Female','Other'].map(g => `<option value="${g}" ${(p.gender||'')===g?'selected':''}>${g||'— select —'}</option>`).join('')}
@@ -709,15 +829,24 @@
       const name = document.getElementById('es-name').value.trim();
       const registerNo = document.getElementById('es-regno').value.trim();
       const phone = document.getElementById('es-phone').value.trim();
+      const photoUrl = document.getElementById('es-photo').value.trim();
       const gender = document.getElementById('es-gender').value;
       const parentEmail = document.getElementById('es-parent').value.trim().toLowerCase();
       const approved = document.getElementById('es-approved').checked;
+      
+      const convertedPhotoUrl = Str.convertDriveLink(photoUrl);
+
       DB.Users.update(studentId, { name, parentEmail: parentEmail || null, parentApproved: approved, phone: phone || null }, session.userId);
-      DB.Profiles.save(studentId, { ...(DB.Profiles.get(studentId)||{}), gender, registerNo, phone }, session.userId);
+      DB.Profiles.save(studentId, { ...(DB.Profiles.get(studentId)||{}), gender, registerNo, phone, avatarUrl: convertedPhotoUrl }, session.userId);
       if (parentEmail) DB.ParentLinks.setParentEmail(studentId, parentEmail, session.userId);
       Toast.success('Saved', 'Student updated.');
       Modal.close('edit-stu');
-      navigate(activeTab);
+      
+      if (selectedClassId) {
+        openClass(selectedClassId);
+      } else {
+        navigate(activeTab);
+      }
     }
 
     // ── Transfer student to another Teacher / Class ──────────────
@@ -908,6 +1037,161 @@
       if (typeof openClass === 'function' && typeof selectedClassId !== 'undefined' && selectedClassId === classId) {
         openClass(classId);
       }
+    };
+
+    window.switchClassTab = function(classId, tabName) {
+      activeClassTab = tabName;
+      openClass(classId);
+    };
+
+    window.switchCourseSem = function(classId, semNum) {
+      const txt = document.getElementById('class-courses-textarea');
+      if (txt) {
+        tempCourses[window._mcActiveSem] = txt.value.split('\n').map(s=>s.trim()).filter(Boolean);
+      }
+      window._mcActiveSem = String(semNum);
+      openClass(classId);
+    };
+
+    window.updateTempCourses = function(classId) {
+      const txt = document.getElementById('class-courses-textarea');
+      if (txt) {
+        tempCourses[window._mcActiveSem] = txt.value.split('\n').map(s=>s.trim()).filter(Boolean);
+      }
+    };
+
+    window.saveClassCoursesDirect = function(classId) {
+      window.updateTempCourses(classId);
+      DB.Classes.update(classId, { semesterCourses: tempCourses }, session.userId);
+      Toast.success('Saved', 'Class-specific courses updated successfully.');
+      openClass(classId);
+    };
+
+    window.filterClassStudents = function() {
+      const query = document.getElementById('class-student-search').value.toLowerCase();
+      const rows = document.querySelectorAll('.class-student-row');
+      rows.forEach(row => {
+        const name = row.dataset.name;
+        const email = row.dataset.email;
+        if (name.includes(query) || email.includes(query)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    };
+
+    window.showImportClassStudentsModal = function(classId) {
+      const cls = DB.Classes.getById(classId);
+      Modal.create('import-class-stu', {
+        title: `Import Students to ${cls?.name || 'Class'}`, size: 'md',
+        body: `
+          <div class="alert alert-info mb-4">${Icons.info}
+            <div><strong>Expected CSV Columns:</strong><br>
+            <code style="font-size:11px;background:var(--bg-surface-2);padding:2px 6px;border-radius:4px">name, email, rollno, registerno, phone, parentemail, photo</code><br>
+            <span style="font-size:11px;color:var(--text-secondary)">Header columns are case-insensitive. "photo" can be a Google Drive link.</span></div>
+          </div>
+          <div class="upload-zone" id="class-csv-drop-zone" onclick="document.getElementById('class-csv-file-input').click()" style="border:2px dashed var(--border-color);border-radius:var(--border-radius-lg);padding:var(--space-6);text-align:center;cursor:pointer;background:var(--bg-surface-1);transition:background var(--transition-fast)">
+            <div style="height:32px;width:32px;margin:0 auto var(--space-3);color:var(--text-secondary);display:flex;justify-content:center;align-items:center;margin-left:auto;margin-right:auto">${Icons.upload}</div>
+            <p><span class="upload-link" style="color:var(--brand-primary);text-decoration:underline">Click to upload</span> or drag and drop<br><span style="font-size:var(--font-size-xs)">CSV files only</span></p>
+          </div>
+          <input type="file" id="class-csv-file-input" accept=".csv,.txt" style="display:none" onchange="handleClassCSVFile(this, '${classId}')">
+          <div id="class-import-preview" style="margin-top:var(--space-4)"></div>
+          <div id="class-import-results" style="margin-top:var(--space-4)"></div>
+        `,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('import-class-stu')">Close</button>`,
+      });
+
+      setTimeout(() => {
+        const zone = document.getElementById('class-csv-drop-zone');
+        if (zone) {
+          zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.background = 'var(--bg-surface-2)'; });
+          zone.addEventListener('dragleave', () => zone.style.background = 'var(--bg-surface-1)');
+          zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.style.background = 'var(--bg-surface-1)';
+            const file = e.dataTransfer.files[0];
+            if (file) processClassCSV(file, classId);
+          });
+        }
+      }, 100);
+    };
+
+    window.handleClassCSVFile = function(input, classId) {
+      const file = input.files[0];
+      if (file) processClassCSV(file, classId);
+    };
+
+    function processClassCSV(file, classId) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const text = e.target.result;
+        window._pendingClassCSVText = text;
+        const lines = text.trim().split('\n');
+        const firstLine = lines[0] || '';
+        const commaCount = (firstLine.match(/,/g) || []).length;
+        const tabCount = (firstLine.match(/\t/g) || []).length;
+        const delimiter = (tabCount > commaCount) ? '\t' : ',';
+
+        const headers = lines[0].split(delimiter).map(h => h.trim());
+        const previewRows = lines.slice(1, 6).filter(Boolean);
+
+        document.getElementById('class-import-preview').innerHTML = `
+          <div class="alert alert-info" style="margin-bottom:var(--space-3)">${Icons.info} ${lines.length - 1} student(s) found in file. Preview:</div>
+          <div class="table-wrapper" style="max-height:160px;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--border-radius-md)">
+            <table class="data-table" style="font-size:12px">
+              <thead><tr><th>#</th>${headers.map(h => `<th>${Str.escHtml(h)}</th>`).join('')}</tr></thead>
+              <tbody>
+                ${previewRows.map((l, i) => `<tr><td>${i+1}</td>${l.split(delimiter).map(v => `<td>${Str.escHtml(v.trim())}</td>`).join('')}</tr>`).join('')}
+                ${lines.length - 1 > 5 ? `<tr><td colspan="${headers.length + 1}" style="text-align:center;color:var(--text-tertiary)">... and ${lines.length - 1 - 5} more rows ...</td></tr>` : ''}
+              </tbody>
+            </table>
+          </div>
+          <button class="btn btn-primary mt-4 hover-lift press-scale" id="btn-do-class-import" onclick="doClassCSVImport('${classId}')" style="width:100%">
+            ${Icons.upload} Import ${lines.length - 1} Students
+          </button>`;
+      };
+      reader.readAsText(file);
+    }
+
+    window.doClassCSVImport = async function(classId) {
+      const csvText = window._pendingClassCSVText;
+      if (!csvText) { Toast.error('No CSV file loaded'); return; }
+      
+      const btn = document.getElementById('btn-do-class-import');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="loading-spinner"></span> Importing...`;
+      }
+      
+      const results = await DB.Users.bulkImport(csvText, session.userId, classId);
+      const ok = results.filter(r => r.ok);
+      const fail = results.filter(r => !r.ok);
+      
+      document.getElementById('class-import-results').innerHTML = `
+        <hr class="divider">
+        <div class="font-semibold mb-2">Import Results:</div>
+        <div class="flex gap-2 mb-3">
+          <span class="badge badge-green">${ok.length} Successful</span>
+          ${fail.length ? `<span class="badge badge-red">${fail.length} Failed</span>` : ''}
+        </div>
+        <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--border-radius-md);padding:var(--space-2);background:var(--bg-surface-2)">
+          ${results.map(r => `
+            <div style="font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between;color:${r.ok ? 'var(--text-primary)' : 'var(--brand-danger)'}">
+              <span>Row ${r.row}: ${Str.escHtml(r.email || '')}</span>
+              <span>${r.ok ? '✓ Success' : '✗ ' + Str.escHtml(r.error)}</span>
+            </div>
+          `).join('')}
+        </div>`;
+        
+      if (ok.length) {
+        Toast.success(`${ok.length} students imported`, 'Roster successfully added.');
+      }
+      if (fail.length) {
+        Toast.error(`${fail.length} rows failed to import`, 'Check log details.');
+      }
+      
+      openClass(classId);
     };
   </script>
 </body>
