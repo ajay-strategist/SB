@@ -637,7 +637,7 @@ const PDFGen = {
           <div style="display:flex;gap:30px;align-items:flex-start">
             <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
               ${photoUrl ? `
-                <img src="${photoUrl}" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
+                <img src="${photoUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%239ca3af%22><path d=%22M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z%22/></svg>';" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
               ` : `
                 <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
                   <div style="font-size:24px;margin-bottom:4px">👤</div>
@@ -662,7 +662,7 @@ const PDFGen = {
           <div style="display:flex;gap:30px;align-items:flex-start">
             <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
               ${photoUrl ? `
-                <img src="${photoUrl}" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
+                <img src="${photoUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%239ca3af%22><path d=%22M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z%22/></svg>';" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
               ` : `
                 <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
                   <div style="font-size:24px;margin-bottom:4px">👤</div>
