@@ -138,7 +138,7 @@ const Str = {
     url = url.trim();
     const regMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
     if (regMatch && regMatch[1]) {
-      return `https://lh3.googleusercontent.com/d/${regMatch[1]}`;
+      return `https://drive.google.com/thumbnail?id=${regMatch[1]}&sz=w500`;
     }
     return url;
   },
@@ -411,6 +411,19 @@ const PDFGen = {
     if (!student) { Toast.error('Student not found'); return; }
 
     const profile = DB.Profiles.get(studentId) || {};
+    let photoUrl = profile.avatarUrl || '';
+    if (photoUrl) {
+      if (photoUrl.includes('lh3.googleusercontent.com/d/')) {
+        const parts = photoUrl.split('/');
+        const fileId = parts[parts.length - 1];
+        photoUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`;
+      } else if (photoUrl.includes('drive.google.com/file/d/')) {
+        const regMatch = photoUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+        if (regMatch && regMatch[1]) {
+          photoUrl = `https://drive.google.com/thumbnail?id=${regMatch[1]}&sz=w500`;
+        }
+      }
+    }
     const program = DB.Programs.getById(student.programId);
     const dept = DB.Departments.getById(student.departmentId);
     const mentor = (() => { const mid = DB.Assignments.getMentor(studentId); return mid ? DB.Users.getById(mid) : null; })();
@@ -545,8 +558,8 @@ const PDFGen = {
           <h2>Student Details</h2>
           <div style="display:flex;gap:30px;align-items:flex-start">
             <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
-              ${profile.avatarUrl ? `
-                <img src="${profile.avatarUrl}" referrerpolicy="no-referrer" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
+              ${photoUrl ? `
+                <img src="${photoUrl}" referrerpolicy="no-referrer" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
               ` : `
                 <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
                   <div style="font-size:24px;margin-bottom:4px">👤</div>
@@ -570,8 +583,8 @@ const PDFGen = {
           <h2>A. Personal Details</h2>
           <div style="display:flex;gap:30px;align-items:flex-start">
             <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
-              ${profile.avatarUrl ? `
-                <img src="${profile.avatarUrl}" referrerpolicy="no-referrer" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
+              ${photoUrl ? `
+                <img src="${photoUrl}" referrerpolicy="no-referrer" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
               ` : `
                 <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
                   <div style="font-size:24px;margin-bottom:4px">👤</div>
@@ -664,10 +677,20 @@ const PDFGen = {
         </div>
         <script>
           window.addEventListener('load', () => {
-            setTimeout(() => {
-              window.focus();
-              window.print();
-            }, 600);
+            const imgs = Array.from(document.querySelectorAll('img'));
+            const promises = imgs.map(img => {
+              if (img.complete) return Promise.resolve();
+              return new Promise(resolve => {
+                img.onload = resolve;
+                img.onerror = resolve;
+              });
+            });
+            Promise.all(promises).then(() => {
+              setTimeout(() => {
+                window.focus();
+                window.print();
+              }, 500);
+            });
           });
         </script>
       </body>
