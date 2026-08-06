@@ -431,6 +431,17 @@
       currentRecordSemester = sem;
       isEditingRecord = false;
       isEditingCourses = false;
+
+      // Update active class on semester tab buttons in DOM
+      const buttons = document.querySelectorAll('.semester-tabs .semester-tab-btn');
+      buttons.forEach((btn, idx) => {
+        if (idx + 1 === sem) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
       renderSemesterDetail();
     }
 
