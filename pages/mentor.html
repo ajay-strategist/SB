@@ -1041,7 +1041,7 @@
       }
 
       else if (activeSubTab === 'academic') {
-        const semCount = course ? course.semesterCount : 6;
+        const semCount = program ? program.semesterCount : 6;
         subContainer.innerHTML = `
           <div class="semester-tabs">
             ${Array.from({ length: semCount }, (_, i) => `
@@ -1185,7 +1185,7 @@
 
       subContainer.innerHTML = `
         <div class="semester-tabs" style="margin-bottom:var(--space-4)">
-          ${Array.from({ length: course ? course.semesterCount : 6 }, (_, i) => `
+          ${Array.from({ length: program ? program.semesterCount : 6 }, (_, i) => `
             <button class="semester-tab-btn ${currentRecordSemester === i+1 ? 'active' : ''}" onclick="switchRecordSemester(${i+1})">Sem ${i+1}</button>`).join('')}
         </div>
 
@@ -1781,7 +1781,7 @@
           <div class="form-group">
             <label class="form-label required">Semester</label>
             <select class="form-select" id="p-sem">
-              ${Array.from({ length: course?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
+              ${Array.from({ length: program?.semesterCount || 6 }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
             </select>
           </div>
           <div class="form-group"><label class="form-label required">Date</label><input type="date" class="form-input" id="p-date" value="${DateFmt.today()}"></div>

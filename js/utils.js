@@ -337,17 +337,69 @@ const PDFGen = {
       size: 'md',
       body: `
         <div style="padding:var(--space-2)">
+          <style>
+            .pdf-export-option-card {
+              display: flex;
+              align-items: center;
+              gap: var(--space-4);
+              padding: var(--space-4);
+              border: 1px solid var(--border-color);
+              border-radius: var(--border-radius-lg);
+              cursor: pointer;
+              background: var(--bg-surface-1);
+              transition: all var(--transition-fast) cubic-bezier(0.4, 0, 0.2, 1);
+              position: relative;
+              overflow: hidden;
+            }
+            .pdf-export-option-card:hover {
+              border-color: var(--brand-primary) !important;
+              background: var(--bg-surface-2) !important;
+              transform: translateY(-2px);
+              box-shadow: var(--shadow-md);
+            }
+            .pdf-export-option-card:active {
+              transform: translateY(0);
+              box-shadow: var(--shadow-sm);
+            }
+            .pdf-export-option-card .icon-container {
+              height: 48px;
+              width: 48px;
+              border-radius: var(--border-radius-md);
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              flex-shrink: 0;
+              transition: all var(--transition-fast);
+            }
+            .pdf-export-option-card:hover .icon-container {
+              transform: scale(1.1);
+            }
+          </style>
           <p style="font-size:var(--font-size-sm);color:var(--text-secondary);margin-bottom:var(--space-4)">Select the report format to export for this student:</p>
-          <div class="flex flex-column gap-3">
-            <button class="btn btn-primary" onclick="PDFGen.generate('${studentId}', 'full'); Modal.close('pdf-export');" style="width:100%;justify-content:center;padding:var(--space-3)">
-              ${Icons.download} &nbsp; Export Full Mentorship Report
-            </button>
-            <p class="text-xs text-muted" style="margin-top:-8px;margin-bottom:var(--space-3);padding-left:var(--space-1)">Includes Personal details, Family details, Entry Qualifications, Semester & Course Academic Marks, Meeting logs, and Achievements.</p>
+          <div class="flex flex-col gap-3">
             
-            <button class="btn btn-secondary" onclick="PDFGen.generate('${studentId}', 'academic'); Modal.close('pdf-export');" style="width:100%;justify-content:center;padding:var(--space-3)">
-              ${Icons.download} &nbsp; Export Academic Report Only
-            </button>
-            <p class="text-xs text-muted" style="margin-top:-8px;margin-bottom:var(--space-1);padding-left:var(--space-1)">Includes basic academic header information, SGPA/Attendance summary, and detailed course-wise semester marks tables only.</p>
+            <!-- Option 1: Full Mentorship Report -->
+            <div class="pdf-export-option-card" onclick="PDFGen.generate('${studentId}', 'full'); Modal.close('pdf-export');">
+              <div class="icon-container" style="background:rgba(99, 102, 241, 0.1);color:var(--brand-primary)">
+                ${Icons.download}
+              </div>
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:var(--font-size-base);color:var(--text-primary);margin-bottom:2px">Full Mentorship Report</div>
+                <div style="font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.4">Includes Personal details, Family details, Entry Qualifications, Semester & Course Academic Marks, Meeting logs, and Achievements.</div>
+              </div>
+            </div>
+
+            <!-- Option 2: Academic Report Only -->
+            <div class="pdf-export-option-card" onclick="PDFGen.generate('${studentId}', 'academic'); Modal.close('pdf-export');">
+              <div class="icon-container" style="background:rgba(16, 185, 129, 0.1);color:var(--brand-success, #10b981)">
+                ${Icons.download}
+              </div>
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:var(--font-size-base);color:var(--text-primary);margin-bottom:2px">Academic Report Only</div>
+                <div style="font-size:var(--font-size-xs);color:var(--text-secondary);line-height:1.4">Includes basic academic header information, SGPA/Attendance summary, and detailed course-wise semester marks tables only.</div>
+              </div>
+            </div>
+
           </div>
         </div>
       `,
