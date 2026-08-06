@@ -465,7 +465,18 @@
       let users = DB.Users.getAll().sort((a, b) => a.name.localeCompare(b.name));
       if (userFilter.role === 'department') users = users.filter(u => u.role === 'hod' || u.role === 'mentor');
       else if (userFilter.role !== 'all') users = users.filter(u => u.role === userFilter.role);
-      if (userFilter.search) users = users.filter(u => u.name.toLowerCase().includes(userFilter.search) || u.email.toLowerCase().includes(userFilter.search) || (u.parentEmail || '').toLowerCase().includes(userFilter.search));
+      if (userFilter.search) {
+        const query = userFilter.search.toLowerCase();
+        const classes = DB.Classes.getAll();
+        users = users.filter(u => {
+          const cls = u.classId ? classes.find(c => c.id === u.classId) : null;
+          const className = cls ? cls.name.toLowerCase() : '';
+          return u.name.toLowerCase().includes(query) || 
+                 u.email.toLowerCase().includes(query) || 
+                 (u.parentEmail || '').toLowerCase().includes(query) ||
+                 className.includes(query);
+        });
+      }
       return users;
     }
 
@@ -484,7 +495,7 @@
         <div class="section-card" style="margin-bottom:var(--space-4)">
           <div class="section-card-body" style="padding:var(--space-4)">
             <div class="flex gap-3 flex-wrap">
-              <div class="search-bar" style="max-width:280px">${Icons.search}<input type="text" placeholder="Search name, email or parent email…" id="user-search" oninput="filterUsers()" value="${userFilter.search}"></div>
+              <div class="search-bar" style="max-width:280px">${Icons.search}<input type="text" placeholder="Search name, email, class or parent email…" id="user-search" oninput="filterUsers()" value="${userFilter.search}"></div>
               ${USER_FILTERS.map(f => `<button class="btn ${userFilter.role === f.key ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="setUserFilter('${f.key}')">${f.label}</button>`).join('')}
             </div>
           </div>
@@ -492,7 +503,7 @@
         <div class="section-card">
           <div class="table-wrapper">
             <table class="data-table" id="users-table">
-              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Parent Email</th><th>Status</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Class</th><th>Parent Email</th><th>Status</th><th>Actions</th></tr></thead>
               <tbody id="users-tbody">${renderUsersRows(getFilteredUsers())}</tbody>
             </table>
           </div>
@@ -501,18 +512,24 @@
 
     function renderUsersRows(users) {
       const depts = DB.Departments.getAll();
-      if (!users.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No users found.</td></tr>';
+      const classes = DB.Classes.getAll();
+      if (!users.length) return '<tr><td colspan="8" style="text-align:center;color:var(--text-tertiary);padding:var(--space-8)">No users found.</td></tr>';
       return users.map(u => {
         const dept = depts.find(d => d.id === u.departmentId);
+        const cls = u.classId ? classes.find(c => c.id === u.classId) : null;
         const statusBadge = {active:'badge-green',invited:'badge-yellow',suspended:'badge-red'}[u.status] || 'badge-gray';
         const parentCell = u.role === 'student'
           ? `<span class="text-sm">${u.parentEmail ? Str.escHtml(u.parentEmail) : '<span class="text-muted">— not set —</span>'}</span>`
+          : '<span class="text-muted">—</span>';
+        const classCell = u.role === 'student'
+          ? `<span class="text-sm font-semibold">${cls ? Str.escHtml(cls.name) : '<span class="text-muted">—</span>'}</span>`
           : '<span class="text-muted">—</span>';
         return `<tr>
           <td><div class="flex items-center gap-3">${renderAvatar(u.name, 'sm', null, u.id)}<span class="font-semibold text-sm">${Str.escHtml(u.name)}</span></div></td>
           <td class="text-sm text-muted">${Str.escHtml(u.email)}</td>
           <td>${renderRoleBadge(u.role)}</td>
           <td class="text-sm">${Str.escHtml(dept?.name || '—')}</td>
+          <td>${classCell}</td>
           <td>${parentCell}</td>
           <td><span class="badge ${statusBadge}">${Str.escHtml(u.status)}</span></td>
           <td>
