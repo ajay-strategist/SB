@@ -311,6 +311,8 @@
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);flex-wrap:wrap;gap:var(--space-2)">
           <button class="btn btn-secondary btn-sm" onclick="setClassView('class')">${Icons.chevronLeft} Back to Classes</button>
           <div class="flex gap-2">
+            <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="exportClassToCSV('${classId}')">${Icons.download} Export Excel</button>
+            <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="showImportClassStudentsModal('${classId}')">${Icons.upload} Import CSV</button>
             <button class="btn btn-secondary btn-sm" onclick="manageClassCoursesModal('${classId}')">${Icons.book} Manage Courses</button>
             <button class="btn btn-primary btn-sm" onclick="showAddStudentsModal('${classId}')">${Icons.plus} Add Students</button>
           </div>
@@ -600,12 +602,14 @@
     // Teacher sets a student's Name & Email; the student fills the rest of their profile themselves.
     function editStudentIdentity(studentId) {
       const s = DB.Users.getById(studentId);
+      const p = DB.Profiles.get(studentId) || {};
       Modal.create('edit-id', {
-        title: 'Edit Student Name & Email', size: 'sm',
+        title: 'Edit Student Details', size: 'sm',
         body: `
-          <div class="alert alert-info mb-4">${Icons.info} You set the name & login email. The student completes the rest of their profile after logging in.</div>
+          <div class="alert alert-info mb-4">${Icons.info} You can update the student's name, email, and photo link. The student completes the rest of their profile after logging in.</div>
           <div class="form-group"><label class="form-label required">Full Name</label><input class="form-input" id="ei-name" value="${Str.escHtml(s.name)}"></div>
-          <div class="form-group"><label class="form-label required">Email (login ID)</label><input type="email" class="form-input" id="ei-email" value="${Str.escHtml(s.email)}"></div>`,
+          <div class="form-group"><label class="form-label required">Email (login ID)</label><input type="email" class="form-input" id="ei-email" value="${Str.escHtml(s.email)}"></div>
+          <div class="form-group"><label class="form-label">Photo URL (Google Drive / Image Link)</label><input class="form-input" id="ei-photo" value="${p.avatarUrl || ''}" placeholder="Paste Google Drive link or web URL"></div>`,
         footer: `<button class="btn btn-secondary" onclick="Modal.close('edit-id')">Cancel</button>
                  <button class="btn btn-primary" onclick="saveStudentIdentity('${studentId}')">Save</button>`,
       });
@@ -613,11 +617,21 @@
     function saveStudentIdentity(studentId) {
       const name = document.getElementById('ei-name').value.trim();
       const email = document.getElementById('ei-email').value.trim().toLowerCase();
+      const photoUrl = document.getElementById('ei-photo').value.trim();
       if (!name || !email) { Toast.error('Name and email required'); return; }
+      
+      const convertedPhotoUrl = Str.convertDriveLink(photoUrl);
       DB.Users.update(studentId, { name, email }, session.userId);
-      Toast.success('Saved', 'Student name & email updated.');
+      DB.Profiles.save(studentId, { ...(DB.Profiles.get(studentId)||{}), avatarUrl: convertedPhotoUrl }, session.userId);
+      
+      Toast.success('Saved', 'Student updated.');
       Modal.close('edit-id');
-      renderClassTab();
+      
+      if (selectedClassId) {
+        openInchargeClass(selectedClassId);
+      } else {
+        renderClassTab();
+      }
     }
 
     // Refer a student to the HOD
@@ -1838,6 +1852,146 @@
       if (typeof openInchargeClass === 'function' && typeof selectedClassId !== 'undefined' && selectedClassId === classId) {
         openInchargeClass(classId);
       }
+    };
+
+    window.exportClassToCSV = function(classId) {
+      const cls = DB.Classes.getById(classId);
+      const students = DB.Classes.getStudents(classId);
+      const rows = students.map(s => {
+        const profile = DB.Profiles.get(s.id) || {};
+        const mentorId = DB.Assignments.getMentor(s.id);
+        const mentor = mentorId ? DB.Users.getById(mentorId) : null;
+        const status = DB.Analytics.getStudentStatus(s.id);
+        
+        return {
+          'Name': s.name,
+          'Email': s.email,
+          'Register Number': profile.registerNo || '',
+          'Roll Number': profile.rollNo || '',
+          'Phone': s.phone || profile.phone || '',
+          'Gender': profile.gender || '',
+          'Parent Email': s.parentEmail || '',
+          'Attendance (%)': currentSemAttendance(s.id),
+          'Status': status === 'green' ? 'On Track' : (status === 'yellow' ? 'Needs Attention' : (status === 'red' ? 'At Risk' : 'No Data')),
+          'Mentor': mentor ? mentor.name : 'Not Assigned'
+        };
+      });
+      
+      exportCSV(rows, `Class_${cls?.name || 'Class'}_Students_${DateFmt.today()}.csv`);
+      Toast.success('Exported', 'Student list exported successfully.');
+    };
+
+    window.showImportClassStudentsModal = function(classId) {
+      const cls = DB.Classes.getById(classId);
+      Modal.create('import-class-stu', {
+        title: `Import Students to ${cls?.name || 'Class'}`, size: 'md',
+        body: `
+          <div class="alert alert-info mb-4">${Icons.info}
+            <div><strong>Expected CSV Columns:</strong><br>
+            <code style="font-size:11px;background:var(--bg-surface-2);padding:2px 6px;border-radius:4px">name, email, rollno, registerno, phone, parentemail, photo</code><br>
+            <span style="font-size:11px;color:var(--text-secondary)">Header columns are case-insensitive. "photo" can be a Google Drive link.</span></div>
+          </div>
+          <div class="upload-zone" id="class-csv-drop-zone" onclick="document.getElementById('class-csv-file-input').click()" style="border:2px dashed var(--border-color);border-radius:var(--border-radius-lg);padding:var(--space-6);text-align:center;cursor:pointer;background:var(--bg-surface-1);transition:background var(--transition-fast)">
+            <div style="height:32px;width:32px;margin:0 auto var(--space-3);color:var(--text-secondary);display:flex;justify-content:center;align-items:center;margin-left:auto;margin-right:auto">${Icons.upload}</div>
+            <p><span class="upload-link" style="color:var(--brand-primary);text-decoration:underline">Click to upload</span> or drag and drop<br><span style="font-size:var(--font-size-xs)">CSV files only</span></p>
+          </div>
+          <input type="file" id="class-csv-file-input" accept=".csv,.txt" style="display:none" onchange="handleClassCSVFile(this, '${classId}')">
+          <div id="class-import-preview" style="margin-top:var(--space-4)"></div>
+          <div id="class-import-results" style="margin-top:var(--space-4)"></div>
+        `,
+        footer: `<button class="btn btn-secondary" onclick="Modal.close('import-class-stu')">Close</button>`,
+      });
+
+      setTimeout(() => {
+        const zone = document.getElementById('class-csv-drop-zone');
+        if (zone) {
+          zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.background = 'var(--bg-surface-2)'; });
+          zone.addEventListener('dragleave', () => zone.style.background = 'var(--bg-surface-1)');
+          zone.addEventListener('drop', e => {
+            e.preventDefault();
+            zone.style.background = 'var(--bg-surface-1)';
+            const file = e.dataTransfer.files[0];
+            if (file) processClassCSV(file, classId);
+          });
+        }
+      }, 100);
+    };
+
+    window.handleClassCSVFile = function(input, classId) {
+      const file = input.files[0];
+      if (file) processClassCSV(file, classId);
+    };
+
+    function processClassCSV(file, classId) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const text = e.target.result;
+        window._pendingClassCSVText = text;
+        const lines = text.trim().split('\n');
+        const firstLine = lines[0] || '';
+        const commaCount = (firstLine.match(/,/g) || []).length;
+        const tabCount = (firstLine.match(/\t/g) || []).length;
+        const delimiter = (tabCount > commaCount) ? '\t' : ',';
+
+        const headers = lines[0].split(delimiter).map(h => h.trim());
+        const previewRows = lines.slice(1, 6).filter(Boolean);
+
+        document.getElementById('class-import-preview').innerHTML = `
+          <div class="alert alert-info" style="margin-bottom:var(--space-3)">${Icons.info} ${lines.length - 1} student(s) found in file. Preview:</div>
+          <div class="table-wrapper" style="max-height:160px;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--border-radius-md)">
+            <table class="data-table" style="font-size:12px">
+              <thead><tr><th>#</th>${headers.map(h => `<th>${Str.escHtml(h)}</th>`).join('')}</tr></thead>
+              <tbody>
+                ${previewRows.map((l, i) => `<tr><td>${i+1}</td>${l.split(delimiter).map(v => `<td>${Str.escHtml(v.trim())}</td>`).join('')}</tr>`).join('')}
+                ${lines.length - 1 > 5 ? `<tr><td colspan="${headers.length + 1}" style="text-align:center;color:var(--text-tertiary)">... and ${lines.length - 1 - 5} more rows ...</td></tr>` : ''}
+              </tbody>
+            </table>
+          </div>
+          <button class="btn btn-primary mt-4 hover-lift press-scale" id="btn-do-class-import" onclick="doClassCSVImport('${classId}')" style="width:100%">
+            ${Icons.upload} Import ${lines.length - 1} Students
+          </button>`;
+      };
+      reader.readAsText(file);
+    }
+
+    window.doClassCSVImport = async function(classId) {
+      const csvText = window._pendingClassCSVText;
+      if (!csvText) { Toast.error('No CSV file loaded'); return; }
+      
+      const btn = document.getElementById('btn-do-class-import');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="loading-spinner"></span> Importing...`;
+      }
+      
+      const results = await DB.Users.bulkImport(csvText, session.userId, classId);
+      const ok = results.filter(r => r.ok);
+      const fail = results.filter(r => !r.ok);
+      
+      document.getElementById('class-import-results').innerHTML = `
+        <hr class="divider">
+        <div class="font-semibold mb-2">Import Results:</div>
+        <div class="flex gap-2 mb-3">
+          <span class="badge badge-green">${ok.length} Successful</span>
+          ${fail.length ? `<span class="badge badge-red">${fail.length} Failed</span>` : ''}
+        </div>
+        <div style="max-height:150px;overflow-y:auto;border:1px solid var(--border-color);border-radius:var(--border-radius-md);padding:var(--space-2);background:var(--bg-surface-2)">
+          ${results.map(r => `
+            <div style="font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between;color:${r.ok ? 'var(--text-primary)' : 'var(--brand-danger)'}">
+              <span>Row ${r.row}: ${Str.escHtml(r.email || '')}</span>
+              <span>${r.ok ? '✓ Success' : '✗ ' + Str.escHtml(r.error)}</span>
+            </div>
+          `).join('')}
+        </div>`;
+        
+      if (ok.length) {
+        Toast.success(`${ok.length} students imported`, 'Roster successfully added.');
+      }
+      if (fail.length) {
+        Toast.error(`${fail.length} rows failed to import`, 'Check log details.');
+      }
+      
+      openInchargeClass(classId);
     };
   </script>
 </body>
