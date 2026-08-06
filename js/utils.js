@@ -207,6 +207,20 @@ const Theme = {
 };
 
 // ── Avatar Render ─────────────────────────────────────────────
+// Turn a stored photo value (Google Drive link, data URL, etc.) into a URL that
+// actually displays. Prefers the same-origin proxy when the app is hosted.
+function resolvePhotoUrl(raw) {
+  if (!raw) return '';
+  if (raw.startsWith('data:')) return raw;
+  let fileId = '';
+  if (raw.includes('lh3.googleusercontent.com/d/')) fileId = raw.split('/d/')[1].split(/[=/?]/)[0];
+  else if (raw.includes('drive.google.com/file/d/')) { const m = raw.match(/\/file\/d\/([a-zA-Z0-9_-]+)/); fileId = m ? m[1] : ''; }
+  else { const m = raw.match(/[?&]id=([a-zA-Z0-9_-]+)/); if (m) fileId = m[1]; }
+  if (!fileId) return raw;
+  const origin = (typeof window !== 'undefined' && window.location && window.location.origin.startsWith('http')) ? window.location.origin : '';
+  return origin ? `${origin}/api/photo?id=${fileId}` : `https://lh3.googleusercontent.com/d/${fileId}=w400`;
+}
+
 function renderAvatar(name, size = 'md', photoUrl = null, studentId = null) {
   const style = studentId ? ` style="view-transition-name: avatar-${studentId}"` : '';
   let url = photoUrl;
@@ -218,7 +232,8 @@ function renderAvatar(name, size = 'md', photoUrl = null, studentId = null) {
     const profile = DB.Profiles.get(session.userId);
     if (profile && profile.avatarUrl) url = profile.avatarUrl;
   }
-  if (url) return `<img src="${url}" class="avatar avatar-${size}" alt="${Str.escHtml(name)}"${style}>`;
+  url = resolvePhotoUrl(url);
+  if (url) return `<img src="${url}" class="avatar avatar-${size}" alt="${Str.escHtml(name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'avatar-placeholder avatar-${size}',textContent:'${Str.initials(name)}'}))"${style}>`;
   return `<div class="avatar-placeholder avatar-${size}"${style}>${Str.initials(name)}</div>`;
 }
 
@@ -442,13 +457,25 @@ const PDFGen = {
     if (rawPhoto.includes('lh3.googleusercontent.com/d/')) fileId = rawPhoto.split('/d/')[1].split(/[=/?]/)[0];
     else if (rawPhoto.includes('drive.google.com/file/d/')) { const m = rawPhoto.match(/\/file\/d\/([a-zA-Z0-9_-]+)/); fileId = m ? m[1] : ''; }
     else { const m = rawPhoto.match(/[?&]id=([a-zA-Z0-9_-]+)/); if (m) fileId = m[1]; }
-    // Prefer Google's image CDN (better CORS + loads reliably in an <img>)
-    let candidateSrc = rawPhoto;
-    if (fileId) candidateSrc = `https://lh3.googleusercontent.com/d/${fileId}=w400`;
+    // Try several Google formats — whichever embeds as a data URL first wins.
     let photoUrl = '';
-    if (candidateSrc) {
-      if (candidateSrc.startsWith('data:')) photoUrl = candidateSrc;               // already embedded
-      else photoUrl = (await imageToDataURL(candidateSrc)) || candidateSrc;         // embed, else best-effort URL
+    if (rawPhoto.startsWith('data:')) {
+      photoUrl = rawPhoto; // already an uploaded/embedded image
+    } else {
+      const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : '';
+      const useProxy = origin.startsWith('http'); // proxy only works when hosted (Vercel), not file://
+      const candidates = fileId ? [
+        ...(useProxy ? [`${origin}/api/photo?id=${fileId}`] : []),  // same-origin proxy — most reliable
+        `https://lh3.googleusercontent.com/d/${fileId}=w500`,
+        `https://drive.google.com/uc?export=view&id=${fileId}`,
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`,
+      ] : (rawPhoto ? [rawPhoto] : []);
+      for (const c of candidates) {
+        const data = await imageToDataURL(c);
+        if (data) { photoUrl = data; break; }
+      }
+      // If none could be embedded (private file / no CORS), fall back to a direct URL.
+      if (!photoUrl && candidates.length) photoUrl = candidates[0];
     }
     const program = DB.Programs.getById(student.programId);
     const dept = DB.Departments.getById(student.departmentId);
@@ -585,7 +612,7 @@ const PDFGen = {
           <div style="display:flex;gap:30px;align-items:flex-start">
             <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
               ${photoUrl ? `
-                <img src="${photoUrl}" referrerpolicy="no-referrer" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
+                <img src="${photoUrl}" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
               ` : `
                 <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
                   <div style="font-size:24px;margin-bottom:4px">👤</div>
@@ -610,7 +637,7 @@ const PDFGen = {
           <div style="display:flex;gap:30px;align-items:flex-start">
             <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
               ${photoUrl ? `
-                <img src="${photoUrl}" referrerpolicy="no-referrer" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
+                <img src="${photoUrl}" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
               ` : `
                 <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
                   <div style="font-size:24px;margin-bottom:4px">👤</div>
