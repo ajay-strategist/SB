@@ -169,6 +169,7 @@
     let session;
     let selectedStudentId = null;
     let selectedClassId = null;
+    let activeClassTab = 'students';
     let activeSubTab = 'profile';
     let currentRecordSemester = 1;
 
@@ -306,49 +307,106 @@
       
       const cls = DB.Classes.getById(classId);
       const students = DB.Classes.getStudents(classId);
+      const program = DB.Programs.getById(cls?.programId);
+      const sems = program?.semesterCount || 6;
+      const classCourses = cls?.semesterCourses || {};
+      const programCourses = program?.defaultCourses || {};
       
-      document.getElementById('class-view-body').innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);flex-wrap:wrap;gap:var(--space-2)">
-          <button class="btn btn-secondary btn-sm" onclick="setClassView('class')">${Icons.chevronLeft} Back to Classes</button>
-          <div class="flex gap-2">
-            <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="exportClassToCSV('${classId}')">${Icons.download} Export Excel</button>
-            <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="showSyncPhotosModal('${classId}')">${Icons.image} Sync Photos</button>
-            <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="showImportClassStudentsModal('${classId}')">${Icons.upload} Import CSV</button>
-            <button class="btn btn-secondary btn-sm" onclick="manageClassCoursesModal('${classId}')">${Icons.book} Manage Courses</button>
-            <button class="btn btn-primary btn-sm" onclick="showAddStudentsModal('${classId}')">${Icons.plus} Add Students</button>
+      if (!tempCourses || tempCourses._classId !== classId) {
+        tempCourses = { _classId: classId };
+        for (let s = 1; s <= sems; s++) {
+          tempCourses[s] = classCourses[s] || programCourses[s] || [];
+        }
+        window._mcActiveSem = "1";
+      }
+
+      const isStudents = activeClassTab === 'students';
+      let tabContent = '';
+
+      if (isStudents) {
+        tabContent = `
+          <!-- Search bar & actions -->
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--space-4);flex-wrap:wrap;gap:var(--space-3)">
+            <div class="search-input-wrapper" style="width:300px;position:relative">
+              <span class="search-icon" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);height:16px;width:16px;color:var(--text-tertiary);display:flex;align-items:center">${Icons.search}</span>
+              <input type="text" class="form-input" id="class-student-search" placeholder="Search students..." oninput="filterClassStudents()" style="padding-left:36px;width:100%">
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="exportClassToCSV('${classId}')">${Icons.download} Export Excel</button>
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="showSyncPhotosModal('${classId}')">${Icons.image} Sync Photos</button>
+              <button class="btn btn-secondary btn-sm hover-lift press-scale" onclick="showImportClassStudentsModal('${classId}')">${Icons.upload} Import CSV</button>
+              <button class="btn btn-primary btn-sm hover-lift press-scale" onclick="showAddStudentsModal('${classId}')">${Icons.plus} Add Students</button>
+            </div>
           </div>
+
+          <!-- Bulk Actions Toolbar -->
+          <div id="bulk-actions-toolbar" class="bulk-toolbar" style="display:none;margin-bottom:var(--space-4);background:var(--bg-surface-2);padding:var(--space-3) var(--space-4);border-radius:var(--border-radius-md);border-left:4px solid var(--brand-primary);align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
+            <div class="text-sm font-semibold"><span id="selected-count">0</span> students selected</div>
+            <div class="flex gap-2">
+              <button class="btn btn-secondary btn-sm" onclick="bulkMoveClass()">${Icons.grid} Move Class</button>
+              <button class="btn btn-secondary btn-sm" onclick="bulkAssignMentor()">${Icons.user} Assign Mentor</button>
+              <button class="btn btn-secondary btn-sm text-warning" onclick="bulkRemoveFromClass()">${Icons.x} Remove from Class</button>
+              <button class="btn btn-danger btn-sm" onclick="bulkDeleteStudents()">${Icons.trash} Delete</button>
+            </div>
+          </div>
+
+          <div class="section-card"><div class="table-wrapper"><table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:40px"><input type="checkbox" id="select-all-class" onclick="toggleSelectAllClass(this.checked)"></th>
+                <th>Student</th>
+                <th>Class</th>
+                <th>Attendance (Current Sem)</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="class-students-tbody">
+              ${students.map(s => rowForClassStudent(s)).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>`}
+            </tbody>
+          </table></div></div>`;
+      } else {
+        tabContent = `
+          <div class="section-card">
+            <div class="section-card-header"><div class="section-card-title">${Icons.book} Class Course List</div></div>
+            <div class="section-card-body">
+              <div class="form-grid" style="grid-template-columns: 200px 1fr; gap: var(--space-5);">
+                <div>
+                  <label class="form-label font-semibold">Select Semester</label>
+                  <div class="flex flex-col gap-1" id="class-courses-sem-tabs" style="display:flex;flex-direction:column;gap:6px">
+                    ${Array.from({ length: sems }, (_, idx) => {
+                      const semNum = idx + 1;
+                      const isSemActive = window._mcActiveSem === String(semNum);
+                      return `<button class="btn btn-block btn-sm ${isSemActive ? 'btn-primary' : 'btn-secondary'}" onclick="switchCourseSem('${classId}', ${semNum})" style="justify-content: flex-start; text-align: left; width: 100%;">${isSemActive ? '● ' : ''}Semester ${semNum}</button>`;
+                    }).join('')}
+                  </div>
+                </div>
+                <div>
+                  <label class="form-label font-semibold" style="display:block;margin-bottom:var(--space-2)">Courses for Semester <span id="active-sem-num">${window._mcActiveSem}</span> (one per line)</label>
+                  <textarea class="form-textarea" id="class-courses-textarea" rows="8" placeholder="e.g.&#10;Mathematics I&#10;Programming in C" style="width: 100%; font-family: inherit; font-size: inherit; padding: var(--space-3); border: 1px solid var(--border-color); border-radius: var(--border-radius-md); background: var(--bg-surface-1); color: var(--text-primary);" oninput="updateTempCourses('${classId}')">${(tempCourses[window._mcActiveSem] || []).join('\n')}</textarea>
+                  <div class="form-hint" style="margin-top: var(--space-2)">Enter each course name on a new line. Click Save below to apply.</div>
+                  <button class="btn btn-primary mt-4 hover-lift press-scale" onclick="saveClassCoursesDirect('${classId}')">${Icons.check} Save Courses</button>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      document.getElementById('class-view-body').innerHTML = `
+        <div style="margin-bottom:var(--space-4)">
+          <button class="btn btn-secondary btn-sm" onclick="setClassView('class')">${Icons.chevronLeft} Back to Classes</button>
         </div>
         <div class="page-header" style="margin-top:0">
           <h2 class="page-title">${cls?.name || 'Class'}</h2>
           <p class="page-subtitle">${students.length} students enrolled · Year ${cls?.currentYear} / ${cls?.durationYears}</p>
         </div>
 
-        <!-- Bulk Actions Toolbar -->
-        <div id="bulk-actions-toolbar" class="bulk-toolbar" style="display:none;margin-bottom:var(--space-4);background:var(--bg-surface-2);padding:var(--space-3) var(--space-4);border-radius:var(--border-radius-md);border-left:4px solid var(--brand-primary);align-items:center;justify-content:space-between;flex-wrap:wrap;gap:var(--space-3)">
-          <div class="text-sm font-semibold"><span id="selected-count">0</span> students selected</div>
-          <div class="flex gap-2">
-            <button class="btn btn-secondary btn-sm" onclick="bulkMoveClass()">${Icons.grid} Move Class</button>
-            <button class="btn btn-secondary btn-sm" onclick="bulkAssignMentor()">${Icons.user} Assign Mentor</button>
-            <button class="btn btn-secondary btn-sm text-warning" onclick="bulkRemoveFromClass()">${Icons.x} Remove from Class</button>
-            <button class="btn btn-danger btn-sm" onclick="bulkDeleteStudents()">${Icons.trash} Delete</button>
-          </div>
+        <div class="tabs" style="margin-bottom:var(--space-4)">
+          <button class="tab-btn ${activeClassTab === 'students' ? 'active' : ''}" onclick="switchClassTab('${classId}', 'students')">Students Name</button>
+          <button class="tab-btn ${activeClassTab === 'courses' ? 'active' : ''}" onclick="switchClassTab('${classId}', 'courses')">Courses</button>
         </div>
 
-        <div class="section-card"><div class="table-wrapper"><table class="data-table">
-          <thead>
-            <tr>
-              <th style="width:40px"><input type="checkbox" id="select-all-class" onclick="toggleSelectAllClass(this.checked)"></th>
-              <th>Student</th>
-              <th>Class</th>
-              <th>Attendance (Current Sem)</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${students.map(s => rowForClassStudent(s)).join('') || `<tr><td colspan="6" style="text-align:center;color:var(--text-tertiary);padding:var(--space-6)">No students in this class.</td></tr>`}
-          </tbody>
-        </table></div></div>`;
+        ${tabContent}`;
     }
 
     function rowForClassStudent(s) {
@@ -1792,67 +1850,55 @@
     Toast.success('Saved', 'Qualitative records updated.');
   }
 
-    // ── Class Course Management Modals ───────────────────────────
+    // ── Class Course Management Tabs ───────────────────────────
     let tempCourses = {};
     window._mcActiveSem = "1";
 
-    window.manageClassCoursesModal = function(classId) {
-      const cls = DB.Classes.getById(classId);
-      const program = DB.Programs.getById(cls.programId);
-      const sems = program?.semesterCount || 6;
-      const classCourses = cls.semesterCourses || {};
-      const programCourses = program?.defaultCourses || {};
-      
-      tempCourses = {};
-      for (let s = 1; s <= sems; s++) {
-        tempCourses[s] = classCourses[s] || programCourses[s] || [];
-      }
-
-      const renderSemCourses = (sem) => {
-        const list = tempCourses[sem] || [];
-        const textarea = document.getElementById('mc-textarea');
-        if (textarea) textarea.value = list.join('\n');
-      };
-
-      window._mcActiveSem = "1";
-
-      Modal.create('manage-courses', {
-        title: `Courses for Class — ${cls.name}`,
-        size: 'md',
-        body: `
-          <div class="form-group">
-            <label class="form-label">Select Semester</label>
-            <select class="form-select" id="mc-sem-select" onchange="tempCourses[window._mcActiveSem] = document.getElementById('mc-textarea').value.split('\\n').map(s=>s.trim()).filter(Boolean); window._mcActiveSem = this.value; const list = tempCourses[this.value] || []; document.getElementById('mc-textarea').value = list.join('\\n');">
-              ${Array.from({ length: sems }, (_, i) => `<option value="${i+1}">Semester ${i+1}</option>`).join('')}
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Courses (one per line)</label>
-            <textarea class="form-textarea" id="mc-textarea" rows="8" placeholder="e.g.&#10;Mathematics I&#10;Programming in C"></textarea>
-            <div class="form-hint">Enter each course name on a new line. Editing this will modify the course list specifically for this class.</div>
-          </div>
-        `,
-        footer: `
-          <button class="btn btn-secondary" onclick="Modal.close('manage-courses')">Cancel</button>
-          <button class="btn btn-primary" onclick="saveClassCourses('${classId}')">Save Courses</button>
-        `
-      });
-
-      renderSemCourses(1);
+    window.switchClassTab = function(classId, tabName) {
+      activeClassTab = tabName;
+      openInchargeClass(classId);
     };
 
-    window.saveClassCourses = function(classId) {
-      const sem = window._mcActiveSem;
-      const textarea = document.getElementById('mc-textarea');
-      if (textarea) {
-        tempCourses[sem] = textarea.value.split('\n').map(s=>s.trim()).filter(Boolean);
+    window.switchCourseSem = function(classId, semNum) {
+      const txt = document.getElementById('class-courses-textarea');
+      if (txt) {
+        tempCourses[window._mcActiveSem] = txt.value.split('\n').map(s=>s.trim()).filter(Boolean);
+      }
+      window._mcActiveSem = String(semNum);
+      openInchargeClass(classId);
+    };
+
+    window.updateTempCourses = function(classId) {
+      const txt = document.getElementById('class-courses-textarea');
+      if (txt) {
+        tempCourses[window._mcActiveSem] = txt.value.split('\n').map(s=>s.trim()).filter(Boolean);
+      }
+    };
+
+    window.saveClassCoursesDirect = function(classId) {
+      const txt = document.getElementById('class-courses-textarea');
+      if (txt) {
+        tempCourses[window._mcActiveSem] = txt.value.split('\n').map(s=>s.trim()).filter(Boolean);
       }
       DB.Classes.update(classId, { semesterCourses: tempCourses }, session.userId);
       Toast.success('Saved', 'Class-specific courses updated successfully.');
-      Modal.close('manage-courses');
-      if (typeof openInchargeClass === 'function' && typeof selectedClassId !== 'undefined' && selectedClassId === classId) {
-        openInchargeClass(classId);
-      }
+      openInchargeClass(classId);
+    };
+
+    window.filterClassStudents = function() {
+      const query = document.getElementById('class-student-search')?.value.trim().toLowerCase() || '';
+      const rows = document.querySelectorAll('#class-students-tbody tr');
+      rows.forEach(row => {
+        const nameNode = row.querySelector('.font-semibold');
+        if (nameNode) {
+          const nameText = nameNode.textContent.toLowerCase();
+          if (nameText.includes(query)) {
+            row.style.display = '';
+          } else {
+            row.style.display = 'none';
+          }
+        }
+      });
     };
 
     window.exportClassToCSV = function(classId) {
