@@ -779,10 +779,18 @@ const PDFGen = {
     // Wait for all images inside the iframe to load (including the student photo)
     const imgs = Array.from(iframeDoc.querySelectorAll('img'));
     await Promise.all(imgs.map(img => {
-      if (img.complete) return Promise.resolve();
+      if (img.complete) {
+        if (img.naturalWidth === 0) {
+          img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzljYTNhZiI+PHBhdGggZD0iTTEyIDEyYzIuMjEgMCAtMS43OSA0LTQtMS43OS00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
+        }
+        return Promise.resolve();
+      }
       return new Promise(resolve => {
         img.onload = resolve;
-        img.onerror = resolve;
+        img.onerror = () => {
+          img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzljYTNhZiI+PHBhdGggZD0iTTEyIDEyYzIuMjEgMCAtMS43OSA0LTQtMS43OS00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
+          resolve();
+        };
       });
     }));
 
