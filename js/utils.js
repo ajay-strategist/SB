@@ -544,6 +544,16 @@ const PDFGen = {
         ${type === 'academic' ? `
           <h2>Student Details</h2>
           <div style="display:flex;gap:30px;align-items:flex-start">
+            <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
+              ${profile.avatarUrl ? `
+                <img src="${profile.avatarUrl}" referrerpolicy="no-referrer" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
+              ` : `
+                <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
+                  <div style="font-size:24px;margin-bottom:4px">👤</div>
+                  <div>NO PHOTO</div>
+                </div>
+              `}
+            </div>
             <div class="grid2" style="flex:1">
               ${[
                 ['Name', student.name],
@@ -555,15 +565,20 @@ const PDFGen = {
                 ['Mentor', mentor?.name || '—']
               ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
             </div>
-            ${profile.avatarUrl ? `
-              <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
-                <img src="${profile.avatarUrl}" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
-              </div>
-            ` : ''}
           </div>
         ` : `
           <h2>A. Personal Details</h2>
           <div style="display:flex;gap:30px;align-items:flex-start">
+            <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
+              ${profile.avatarUrl ? `
+                <img src="${profile.avatarUrl}" referrerpolicy="no-referrer" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
+              ` : `
+                <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
+                  <div style="font-size:24px;margin-bottom:4px">👤</div>
+                  <div>NO PHOTO</div>
+                </div>
+              `}
+            </div>
             <div class="grid2" style="flex:1">
               ${[
                 ['Name', student.name],
@@ -582,11 +597,6 @@ const PDFGen = {
                 ['Mentor', mentor?.name || '—']
               ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
             </div>
-            ${profile.avatarUrl ? `
-              <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
-                <img src="${profile.avatarUrl}" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
-              </div>
-            ` : ''}
           </div>
 
           <h2>B. Family Details</h2>
