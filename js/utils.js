@@ -475,33 +475,6 @@ const PDFGen = {
     if (!student) { Toast.error('Student not found'); return; }
 
     const profile = DB.Profiles.get(studentId) || {};
-    // Resolve the student photo and EMBED it as a data URL so it prints reliably
-    // (external URLs — esp. Google Drive — often fail to load in the print window).
-    const rawPhoto = profile.avatarUrl || profile.photo || '';
-    let fileId = '';
-    if (rawPhoto.includes('lh3.googleusercontent.com/d/')) fileId = rawPhoto.split('/d/')[1].split(/[=/?]/)[0];
-    else if (rawPhoto.includes('drive.google.com/file/d/')) { const m = rawPhoto.match(/\/file\/d\/([a-zA-Z0-9_-]+)/); fileId = m ? m[1] : ''; }
-    else { const m = rawPhoto.match(/[?&]id=([a-zA-Z0-9_-]+)/); if (m) fileId = m[1]; }
-    // Try several Google formats — whichever embeds as a data URL first wins.
-    let photoUrl = '';
-    if (rawPhoto.startsWith('data:')) {
-      photoUrl = rawPhoto; // already an uploaded/embedded image
-    } else {
-      const origin = (typeof window !== 'undefined' && window.location) ? window.location.origin : '';
-      const useProxy = origin.startsWith('http'); // proxy only works when hosted (Vercel), not file://
-      const candidates = fileId ? [
-        ...(useProxy ? [`${origin}/api/photo?id=${fileId}`] : []),  // same-origin proxy — most reliable
-        `https://lh3.googleusercontent.com/d/${fileId}=w500`,
-        `https://drive.google.com/uc?export=view&id=${fileId}`,
-        `https://drive.google.com/thumbnail?id=${fileId}&sz=w500`,
-      ] : (rawPhoto ? [rawPhoto] : []);
-      for (const c of candidates) {
-        const data = await imageToDataURL(c);
-        if (data) { photoUrl = data; break; }
-      }
-      // If none could be embedded (private file / no CORS), fall back to a direct URL.
-      if (!photoUrl && candidates.length) photoUrl = candidates[0];
-    }
     const program = DB.Programs.getById(student.programId);
     const dept = DB.Departments.getById(student.departmentId);
     const mentor = (() => { const mid = DB.Assignments.getMentor(studentId); return mid ? DB.Users.getById(mid) : null; })();
@@ -634,18 +607,7 @@ const PDFGen = {
 
         ${type === 'academic' ? `
           <h2>Student Details</h2>
-          <div style="display:flex;gap:30px;align-items:flex-start">
-            <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
-              ${photoUrl ? `
-                <img src="${photoUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%239ca3af%22><path d=%22M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z%22/></svg>';" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
-              ` : `
-                <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
-                  <div style="font-size:24px;margin-bottom:4px">👤</div>
-                  <div>NO PHOTO</div>
-                </div>
-              `}
-            </div>
-            <div class="grid2" style="flex:1">
+          <div class="grid2">
               ${[
                 ['Name', student.name],
                 ['Register No.', profile.registerNo || '—'],
@@ -655,22 +617,10 @@ const PDFGen = {
                 ['Class', profile.className || '—'],
                 ['Mentor', mentor?.name || '—']
               ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
-            </div>
           </div>
         ` : `
           <h2>A. Personal Details</h2>
-          <div style="display:flex;gap:30px;align-items:flex-start">
-            <div style="width:130px;text-align:center;flex-shrink:0;margin-top:6px">
-              ${photoUrl ? `
-                <img src="${photoUrl}" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22%239ca3af%22><path d=%22M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z%22/></svg>';" style="width:120px;height:140px;object-fit:cover;border:1px solid #e5e7eb;border-radius:6px;padding:3px;background:#fff" alt="Student Photo">
-              ` : `
-                <div style="width:120px;height:140px;border:1px solid #e5e7eb;border-radius:6px;background:#f3f4f6;display:flex;flex-direction:column;justify-content:center;align-items:center;color:#9ca3af;font-size:9.5px;font-family:Arial,sans-serif">
-                  <div style="font-size:24px;margin-bottom:4px">👤</div>
-                  <div>NO PHOTO</div>
-                </div>
-              `}
-            </div>
-            <div class="grid2" style="flex:1">
+          <div class="grid2">
               ${[
                 ['Name', student.name],
                 ['Register No.', profile.registerNo || '—'],
@@ -687,7 +637,6 @@ const PDFGen = {
                 ['Hobbies', profile.hobbies || '—'],
                 ['Mentor', mentor?.name || '—']
               ].map(([l, v]) => `<div class="field"><div class="label">${l}</div><div class="value">${Str.escHtml(v)}</div></div>`).join('')}
-            </div>
           </div>
 
           <h2>B. Family Details</h2>
