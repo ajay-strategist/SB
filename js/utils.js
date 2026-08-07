@@ -487,7 +487,9 @@ const PDFGen = {
     
     let logoData = '';
     try {
-      const resp = await fetch(new URL('../SB Logo.png', window.location.href).href);
+      const timeoutPromise = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+      const fetchPromise = fetch(new URL('../SB Logo.png', window.location.href).href);
+      const resp = await Promise.race([fetchPromise, timeoutPromise]);
       const blob = await resp.blob();
       logoData = await new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(''); r.readAsDataURL(blob); });
     } catch (e) { logoData = ''; }
@@ -588,7 +590,7 @@ const PDFGen = {
       </head>
       <body>
         <div class="header">
-          ${logoData ? `<img class="logo" src="${logoData}" alt="College logo">` : `<div class="brand-name">${Str.escHtml(collegeInfo.name)}</div>`}
+          ${logoData ? `<img class="logo" src="${logoData}" alt="College logo" onerror="this.style.display='none'">` : `<div class="brand-name">${Str.escHtml(collegeInfo.name)}</div>`}
           <div class="doc-badge">
             <div class="doc-title">${type === 'academic' ? 'ACADEMIC REPORT' : "MENTOR'S FILE"}</div>
             <div class="doc-year">Academic Year ${DateFmt.currentYear()}–${DateFmt.currentYear() + 1}</div>
@@ -725,26 +727,8 @@ const PDFGen = {
     iframeDoc.write(html);
     iframeDoc.close();
 
-    // Wait for all images inside the iframe to load (including the student photo)
-    const imgs = Array.from(iframeDoc.querySelectorAll('img'));
-    await Promise.all(imgs.map(img => {
-      if (img.complete) {
-        if (img.naturalWidth === 0) {
-          img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzljYTNhZiI+PHBhdGggZD0iTTEyIDEyYzIuMjEgMCAtMS43OSA0LTQtMS43OS00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
-        }
-        return Promise.resolve();
-      }
-      return new Promise(resolve => {
-        img.onload = resolve;
-        img.onerror = () => {
-          img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iIzljYTNhZiI+PHBhdGggZD0iTTEyIDEyYzIuMjEgMCAtMS43OSA0LTQtMS43OS00LTQtNCAxLjc5LTQgNCAxLjc5IDQgNCA0em0wIDJjLTIuNjcgMC04IDEuMzQtOCA0djJoMTZ2LTJjMC0yLjY2LTUuMzMtNC04LTR6Ii8+PC9zdmc+';
-          resolve();
-        };
-      });
-    }));
-
-    // Wait 500ms for browser painting
-    await new Promise(r => setTimeout(r, 500));
+    // Brief delay for browser to finish painting before opening print dialog
+    await new Promise(r => setTimeout(r, 50));
 
     // Focus and print the iframe
     iframe.contentWindow.focus();
